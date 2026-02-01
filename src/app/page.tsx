@@ -63,7 +63,11 @@ export default function HomePage() {
     equipItem,
     unequipItem,
     destroyItem,
+    clearInventory,
   } = useGameStore();
+
+  // Track monsters killed locally for live updates
+  const [localMonstersKilled, setLocalMonstersKilled] = useState(0);
 
   const loadGameData = useCallback(async () => {
     try {
@@ -73,6 +77,7 @@ export default function HomePage() {
       if (data.success) {
         setGameData(data);
         setCurrentHp(data.character.currentHp ?? data.stats.maxHp);
+        setLocalMonstersKilled(data.character.monstersKilled || 0);
         // Load inventory and equipment
         await loadAllData(data.character.id);
       } else if (data.message === 'No character found') {
@@ -114,6 +119,7 @@ export default function HomePage() {
             zen: gameData.character.zen,
             level: gameData.character.level,
             levelup_points: gameData.character.levelupPoints,
+            monsters_killed: localMonstersKilled,
           }),
         });
         console.log('Progress saved');
@@ -134,7 +140,7 @@ export default function HomePage() {
       clearInterval(saveInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [gameData]);
+  }, [gameData, localMonstersKilled]);
 
   const handleHpChange = async (newHp: number) => {
     setCurrentHp(newHp);
@@ -268,6 +274,17 @@ export default function HomePage() {
   const handleDestroyItem = async (slotIndex: number) => {
     if (!gameData) return;
     await destroyItem(slotIndex, gameData.character.id);
+  };
+
+  const handleClearInventory = async () => {
+    if (!gameData) return;
+    if (confirm('Are you sure you want to destroy ALL items in your inventory?')) {
+      await clearInventory(gameData.character.id);
+    }
+  };
+
+  const handleMonsterKill = () => {
+    setLocalMonstersKilled((prev) => prev + 1);
   };
 
   const handleAddStat = async (statName: string) => {
@@ -453,7 +470,7 @@ export default function HomePage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">Monsters Killed:</span>
-              <span className="text-orange-400">{character.monstersKilled.toLocaleString()}</span>
+              <span className="text-orange-400">{localMonstersKilled.toLocaleString()}</span>
             </div>
           </div>
 
@@ -527,6 +544,7 @@ export default function HomePage() {
             onExpGain={handleExpGain}
             onItemDrop={handleItemDrop}
             onDeath={handleDeath}
+            onMonsterKill={handleMonsterKill}
           />
         </div>
 
@@ -540,25 +558,55 @@ export default function HomePage() {
           />
 
           {/* Equipment Bonuses */}
-          {(equipmentBonuses.damage_min > 0 || equipmentBonuses.defense > 0) && (
-            <div className="mt-3 pt-3 border-t border-gray-700 text-xs">
-              <div className="text-gray-400 mb-1">Equipment Bonuses:</div>
-              {equipmentBonuses.damage_min > 0 && (
-                <div className="text-green-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} Damage</div>
-              )}
-              {equipmentBonuses.defense > 0 && (
-                <div className="text-blue-400">+{equipmentBonuses.defense} Defense</div>
-              )}
-              {equipmentBonuses.attack_speed > 0 && (
-                <div className="text-yellow-400">+{equipmentBonuses.attack_speed} Attack Speed</div>
-              )}
-            </div>
-          )}
+          <div className="mt-3 pt-3 border-t border-gray-700 text-xs">
+            <div className="text-gray-400 mb-1">Equipment Bonuses:</div>
+            {equipmentBonuses.damage_min > 0 && (
+              <div className="text-red-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} Damage</div>
+            )}
+            {equipmentBonuses.defense > 0 && (
+              <div className="text-blue-400">+{equipmentBonuses.defense} Defense</div>
+            )}
+            {equipmentBonuses.attack_speed > 0 && (
+              <div className="text-yellow-400">+{equipmentBonuses.attack_speed} Attack Speed</div>
+            )}
+            {equipmentBonuses.critical_rate > 0 && (
+              <div className="text-cyan-400">+{equipmentBonuses.critical_rate}% Critical Rate</div>
+            )}
+            {equipmentBonuses.critical_damage > 0 && (
+              <div className="text-cyan-400">+{equipmentBonuses.critical_damage}% Critical Damage</div>
+            )}
+            {equipmentBonuses.life_steal > 0 && (
+              <div className="text-pink-400">+{equipmentBonuses.life_steal}% Life Steal</div>
+            )}
+            {equipmentBonuses.exp_bonus > 0 && (
+              <div className="text-purple-400">+{equipmentBonuses.exp_bonus}% EXP</div>
+            )}
+            {equipmentBonuses.zen_bonus > 0 && (
+              <div className="text-green-400">+{equipmentBonuses.zen_bonus}% Zen</div>
+            )}
+            {equipmentBonuses.max_hp > 0 && (
+              <div className="text-red-400">+{equipmentBonuses.max_hp}% Max HP</div>
+            )}
+            {equipmentBonuses.hp_recovery > 0 && (
+              <div className="text-red-400">+{equipmentBonuses.hp_recovery}% HP Recovery</div>
+            )}
+            {equipmentBonuses.damage_decrease > 0 && (
+              <div className="text-blue-400">-{equipmentBonuses.damage_decrease}% Damage Taken</div>
+            )}
+          </div>
         </div>
 
         {/* Inventory */}
         <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 lg:col-span-4">
-          <h2 className="text-lg font-semibold text-yellow-400 mb-3">Inventory</h2>
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-semibold text-yellow-400">Inventory</h2>
+            <button
+              onClick={handleClearInventory}
+              className="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-xs font-semibold"
+            >
+              Clear All
+            </button>
+          </div>
           <div className="grid grid-cols-8 sm:grid-cols-12 gap-1">
             {inventory.map((slot) => (
               <InventorySlot

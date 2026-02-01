@@ -18,6 +18,7 @@ interface HuntingPanelProps {
   onExpGain: (exp: bigint, zen: bigint) => void;
   onItemDrop: () => void;
   onDeath: () => void;
+  onMonsterKill: () => void;
 }
 
 interface CombatLog {
@@ -60,6 +61,7 @@ export default function HuntingPanel({
   onExpGain,
   onItemDrop,
   onDeath,
+  onMonsterKill,
 }: HuntingPanelProps) {
   const [selectedLocation, setSelectedLocation] = useState(0);
   const [isHunting, setIsHunting] = useState(false);
@@ -190,6 +192,7 @@ export default function HuntingPanel({
 
       addLog(`${currentMonster.name} defeated! +${expGain} EXP, +${zenGain} Zen`, 'exp');
       setMonstersKilled((prev) => prev + 1);
+      onMonsterKill();
 
       // Check for item drop (10% chance)
       if (Math.random() < 0.1) {
@@ -228,6 +231,7 @@ export default function HuntingPanel({
     onExpGain,
     onItemDrop,
     onHpChange,
+    onMonsterKill,
     spawnMonster,
   ]);
 
