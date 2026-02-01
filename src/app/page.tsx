@@ -52,6 +52,8 @@ export default function HomePage() {
   const [currentHp, setCurrentHp] = useState(0);
   const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [expPerSecond, setExpPerSecond] = useState(0);
+  const [lastExpUpdate, setLastExpUpdate] = useState<{ exp: bigint; time: number } | null>(null);
 
   const {
     inventory,
@@ -157,6 +159,19 @@ export default function HomePage() {
 
     const newExp = BigInt(gameData.character.experience) + exp;
     const newZen = BigInt(gameData.character.zen) + zen;
+
+    // Track EXP per second
+    const now = Date.now();
+    if (lastExpUpdate) {
+      const timeDiff = (now - lastExpUpdate.time) / 1000;
+      if (timeDiff > 0 && timeDiff < 10) {
+        const expDiff = Number(newExp - lastExpUpdate.exp);
+        const newExpPerSec = expDiff / timeDiff;
+        // Smooth average
+        setExpPerSecond(prev => prev === 0 ? newExpPerSec : (prev * 0.7 + newExpPerSec * 0.3));
+      }
+    }
+    setLastExpUpdate({ exp: newExp, time: now });
 
     // Check for level up (simple formula: level * 100 exp needed)
     let newLevel = gameData.character.level;
@@ -385,10 +400,43 @@ export default function HomePage() {
                 <span className="text-purple-400">{character.resetCount}</span>
               </div>
             )}
-            <div className="flex justify-between">
-              <span className="text-gray-400">EXP:</span>
-              <span>{BigInt(character.experience).toLocaleString()}</span>
-            </div>
+            {/* EXP Progress */}
+            {(() => {
+              const currentExp = BigInt(character.experience);
+              const expNeeded = BigInt(character.level * 100);
+              const percentage = Number((currentExp * 100n) / expNeeded);
+              const expRemaining = Number(expNeeded - currentExp);
+              const timeToLevel = expPerSecond > 0 ? Math.ceil(expRemaining / expPerSecond) : null;
+
+              const formatTime = (seconds: number) => {
+                if (seconds < 60) return `${seconds}s`;
+                if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                return `${hours}h ${mins}m`;
+              };
+
+              return (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">EXP:</span>
+                    <span>{currentExp.toLocaleString()} / {expNeeded.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(percentage, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-purple-400">{percentage.toFixed(1)}%</span>
+                    {timeToLevel !== null && (
+                      <span className="text-gray-500">~{formatTime(timeToLevel)}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="flex justify-between">
               <span className="text-gray-400">Zen:</span>
               <span className="text-green-400">{BigInt(character.zen).toLocaleString()}</span>
