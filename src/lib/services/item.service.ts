@@ -109,9 +109,8 @@ export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedIt
   const damageMin = randomItem.damageMin + bonus;
   const damageMax = randomItem.damageMax + bonus;
   const defense = randomItem.defenseValue + bonus;
-  // Remove any existing +X from base name before adding new enhancement
-  const baseName = randomItem.name.replace(/\s*\+\d+$/, '');
-  const name = enhancement > 0 ? `${baseName} +${enhancement}` : baseName;
+  // Store base name only - enhancement is displayed separately via enhancementLevel
+  const name = randomItem.name.replace(/\s*\+\d+$/, '');
 
   // Roll for rarity (70% common, 20% uncommon, 10% rare)
   const rarityRoll = Math.floor(Math.random() * 100) + 1;

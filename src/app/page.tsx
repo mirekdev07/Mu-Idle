@@ -451,6 +451,10 @@ export default function HomePage() {
               <span className="text-gray-400">Zen:</span>
               <span className="text-green-400">{BigInt(character.zen).toLocaleString()}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Monsters Killed:</span>
+              <span className="text-orange-400">{character.monstersKilled.toLocaleString()}</span>
+            </div>
           </div>
 
           {/* Base Stats with + buttons */}
