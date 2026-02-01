@@ -44,11 +44,18 @@ export async function getEquipmentBonuses(characterId: number): Promise<Equipmen
   const bonuses: EquipmentBonuses = { ...DEFAULT_EQUIPMENT_BONUSES };
 
   for (const item of equipment) {
-    // Base stats
-    bonuses.damage_min += item.damageMin;
-    bonuses.damage_max += item.damageMax;
-    bonuses.attack_speed += item.attackSpeed;
-    bonuses.defense += item.defenseValue;
+    // Weapons (slot 0) add damage, armor (slots 1-6) adds defense
+    const isWeapon = item.slot === 0;
+
+    if (isWeapon) {
+      // Weapons add damage and attack speed
+      bonuses.damage_min += item.damageMin;
+      bonuses.damage_max += item.damageMax;
+      bonuses.attack_speed += item.attackSpeed;
+    } else {
+      // Armor adds defense
+      bonuses.defense += item.defenseValue;
+    }
 
     // Process options
     if (item.itemOptions) {

@@ -194,13 +194,23 @@ export default function HomePage() {
       levelupPoints: newPoints,
     };
 
+    // Calculate new maxHp for new level (same formula as stats.service.ts)
+    const newMaxHp = leveledUp
+      ? Math.floor(100 + gameData.character.vitality * 7.5 + newLevel * 10)
+      : gameData.stats.maxHp;
+
     setGameData({
       ...gameData,
       character: newCharacterData,
+      stats: leveledUp
+        ? { ...gameData.stats, maxHp: newMaxHp }
+        : gameData.stats,
     });
 
-    // Save immediately on level up so stat points are available
+    // On level up: restore HP to full and save progress
     if (leveledUp) {
+      setCurrentHp(newMaxHp);
+
       try {
         await fetch('/api/game/progress', {
           method: 'POST',
@@ -551,6 +561,7 @@ export default function HomePage() {
                 key={slot.slotIndex}
                 item={slot.item}
                 slotIndex={slot.slotIndex}
+                equipment={equipment}
                 onEquip={handleEquipItem}
                 onDestroy={handleDestroyItem}
                 onHover={handleItemHover}

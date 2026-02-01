@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Item } from '@/types/game';
+import { Item, Equipment, EQUIPMENT_SLOTS } from '@/types/game';
 
 interface InventorySlotProps {
   item: Item | null;
   slotIndex: number;
+  equipment?: Equipment;
   onEquip?: (item: Item, slotIndex: number) => void;
   onDestroy?: (slotIndex: number) => void;
   onHover?: (item: Item | null, position: { x: number; y: number } | null) => void;
@@ -19,9 +20,53 @@ const RARITY_BORDERS: Record<string, string> = {
   legendary: 'border-yellow-500',
 };
 
+// Get the equipment slot key for an item category
+function getEquipmentSlotForCategory(category: number): keyof Equipment | null {
+  const slot = EQUIPMENT_SLOTS.find((s) => s.categories.includes(category));
+  return slot?.key ?? null;
+}
+
+// Compare item to equipped item
+function compareToEquipped(
+  item: Item,
+  equipment: Equipment
+): { isBetter: boolean; isWorse: boolean; diff: number } {
+  const slotKey = getEquipmentSlotForCategory(item.category);
+  if (!slotKey) return { isBetter: false, isWorse: false, diff: 0 };
+
+  const equippedItem = equipment[slotKey];
+  if (!equippedItem) {
+    // Nothing equipped = this item is better (any item > no item)
+    return { isBetter: true, isWorse: false, diff: 1 };
+  }
+
+  // For weapons (category 0-5), compare damage
+  // For armor (category 6-11), compare defense
+  const isWeapon = item.category >= 0 && item.category <= 5;
+
+  if (isWeapon) {
+    const itemDamage = (item.damage_min + item.damage_max) / 2;
+    const equippedDamage = (equippedItem.damage_min + equippedItem.damage_max) / 2;
+    const diff = itemDamage - equippedDamage;
+    return {
+      isBetter: diff > 0,
+      isWorse: diff < 0,
+      diff: Math.round(diff),
+    };
+  } else {
+    const diff = item.defense - equippedItem.defense;
+    return {
+      isBetter: diff > 0,
+      isWorse: diff < 0,
+      diff,
+    };
+  }
+}
+
 export default function InventorySlot({
   item,
   slotIndex,
+  equipment,
   onEquip,
   onDestroy,
   onHover,
@@ -63,6 +108,9 @@ export default function InventorySlot({
 
   const borderClass = item ? RARITY_BORDERS[item.rarity || 'common'] : 'border-gray-700';
 
+  // Compare to equipped
+  const comparison = item && equipment ? compareToEquipped(item, equipment) : null;
+
   return (
     <div
       className={`relative w-12 h-12 bg-gray-800 border-2 ${borderClass} rounded cursor-pointer hover:bg-gray-700 transition-colors flex items-center justify-center`}
@@ -80,6 +128,19 @@ export default function InventorySlot({
       {item && (item.enhancementLevel ?? 0) > 0 && (
         <span className="absolute -top-1 -right-1 bg-yellow-500 text-black text-xs font-bold px-1 rounded">
           +{item.enhancementLevel}
+        </span>
+      )}
+
+      {/* Comparison indicator (better/worse than equipped) */}
+      {comparison && (comparison.isBetter || comparison.isWorse) && (
+        <span
+          className={`absolute -bottom-1 -left-1 text-xs font-bold px-1 rounded ${
+            comparison.isBetter
+              ? 'bg-green-600 text-white'
+              : 'bg-red-600 text-white'
+          }`}
+        >
+          {comparison.isBetter ? '▲' : '▼'}
         </span>
       )}
 
