@@ -31,10 +31,20 @@ interface ActiveMonster extends Monster {
   maxHp: number;
 }
 
+interface FloatingDamage {
+  id: number;
+  damage: number;
+  type: 'normal' | 'critical' | 'excellent';
+  x: number;
+  y: number;
+}
+
 // Simple damage calculation
-function calculateDamage(min: number, max: number, isCritical: boolean): number {
+function calculateDamage(min: number, max: number, isCritical: boolean, isExcellent: boolean): number {
   const base = Math.floor(Math.random() * (max - min + 1)) + min;
-  return isCritical ? Math.floor(base * 1.5) : base;
+  if (isExcellent) return Math.floor(base * 2);
+  if (isCritical) return Math.floor(base * 1.5);
+  return base;
 }
 
 export default function HuntingPanel({
@@ -56,8 +66,13 @@ export default function HuntingPanel({
   const [currentMonster, setCurrentMonster] = useState<ActiveMonster | null>(null);
   const [combatLog, setCombatLog] = useState<CombatLog[]>([]);
   const [monstersKilled, setMonstersKilled] = useState(0);
+  const [floatingDamages, setFloatingDamages] = useState<FloatingDamage[]>([]);
+  const [respawnTimer, setRespawnTimer] = useState<number | null>(null);
+  const [isDead, setIsDead] = useState(false);
   const logIdRef = useRef(0);
+  const damageIdRef = useRef(0);
   const combatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const respawnIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const location = LOCATIONS[selectedLocation];
 
@@ -67,6 +82,25 @@ export default function HuntingPanel({
       { id: logIdRef.current, message, type },
       ...prev.slice(0, 49),
     ]);
+  }, []);
+
+  const addFloatingDamage = useCallback((damage: number, type: 'normal' | 'critical' | 'excellent') => {
+    damageIdRef.current += 1;
+    const x = 40 + Math.random() * 20; // Random position around monster
+    const y = 30 + Math.random() * 10;
+    const newDamage: FloatingDamage = {
+      id: damageIdRef.current,
+      damage,
+      type,
+      x,
+      y,
+    };
+    setFloatingDamages((prev) => [...prev, newDamage]);
+
+    // Remove after animation
+    setTimeout(() => {
+      setFloatingDamages((prev) => prev.filter((d) => d.id !== newDamage.id));
+    }, 1000);
   }, []);
 
   const spawnMonster = useCallback(() => {
@@ -88,17 +122,60 @@ export default function HuntingPanel({
     return activeMonster;
   }, [location, addLog]);
 
+  // Auto-respawn after death
+  useEffect(() => {
+    if (isDead && respawnTimer === null) {
+      setRespawnTimer(5);
+
+      respawnIntervalRef.current = setInterval(() => {
+        setRespawnTimer((prev) => {
+          if (prev === null || prev <= 1) {
+            // Respawn!
+            clearInterval(respawnIntervalRef.current!);
+            respawnIntervalRef.current = null;
+            setIsDead(false);
+            onHpChange(maxHp);
+            addLog(`Respawned with full HP!`, 'heal');
+
+            // Auto-start hunting
+            setTimeout(() => {
+              setIsHunting(true);
+              setCurrentMonster(spawnMonster());
+              addLog(`Resumed hunting in ${location.name}!`, 'info');
+            }, 100);
+
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (respawnIntervalRef.current) {
+        clearInterval(respawnIntervalRef.current);
+      }
+    };
+  }, [isDead, respawnTimer, maxHp, onHpChange, addLog, spawnMonster, location.name]);
+
   const performCombatRound = useCallback(() => {
-    if (!currentMonster || currentHp <= 0) return;
+    if (!currentMonster || currentHp <= 0 || isDead) return;
 
     // Player attacks monster
     const isCritical = Math.random() * 100 < criticalRate;
-    const playerDamage = calculateDamage(minDamage, maxDamage, isCritical);
+    const isExcellent = Math.random() * 100 < 5; // 5% excellent chance
+    const playerDamage = calculateDamage(minDamage, maxDamage, isCritical, isExcellent);
     const newMonsterHp = Math.max(0, currentMonster.currentHp - playerDamage);
 
-    if (isCritical) {
+    // Add floating damage
+    if (isExcellent) {
+      addFloatingDamage(playerDamage, 'excellent');
+      addLog(`Excellent! You deal ${playerDamage} damage to ${currentMonster.name}!`, 'damage');
+    } else if (isCritical) {
+      addFloatingDamage(playerDamage, 'critical');
       addLog(`Critical! You deal ${playerDamage} damage to ${currentMonster.name}!`, 'damage');
     } else {
+      addFloatingDamage(playerDamage, 'normal');
       addLog(`You deal ${playerDamage} damage to ${currentMonster.name}.`, 'damage');
     }
 
@@ -137,8 +214,10 @@ export default function HuntingPanel({
 
     if (newPlayerHp <= 0) {
       onHpChange(0);
-      addLog('You have been defeated!', 'death');
+      addLog('You have been defeated! Respawning in 5 seconds...', 'death');
       setIsHunting(false);
+      setIsDead(true);
+      setCurrentMonster(null);
       onDeath();
     } else {
       onHpChange(newPlayerHp);
@@ -146,11 +225,13 @@ export default function HuntingPanel({
   }, [
     currentMonster,
     currentHp,
+    isDead,
     minDamage,
     maxDamage,
     defense,
     criticalRate,
     addLog,
+    addFloatingDamage,
     onExpGain,
     onItemDrop,
     onHpChange,
@@ -160,7 +241,7 @@ export default function HuntingPanel({
 
   // Combat loop
   useEffect(() => {
-    if (isHunting && currentHp > 0) {
+    if (isHunting && currentHp > 0 && !isDead) {
       const attackInterval = Math.max(500, 2000 - attackSpeed * 10);
       combatIntervalRef.current = setInterval(performCombatRound, attackInterval);
     } else {
@@ -175,13 +256,10 @@ export default function HuntingPanel({
         clearInterval(combatIntervalRef.current);
       }
     };
-  }, [isHunting, currentHp, attackSpeed, performCombatRound]);
+  }, [isHunting, currentHp, isDead, attackSpeed, performCombatRound]);
 
   const startHunting = () => {
-    if (currentHp <= 0) {
-      addLog('You need to heal first!', 'info');
-      return;
-    }
+    if (currentHp <= 0 || isDead) return;
     setIsHunting(true);
     setCurrentMonster(spawnMonster());
     addLog(`Started hunting in ${location.name}!`, 'info');
@@ -193,36 +271,36 @@ export default function HuntingPanel({
     addLog('Stopped hunting.', 'info');
   };
 
-  const healCharacter = () => {
-    onHpChange(maxHp);
-    addLog(`Healed to full HP (${maxHp})!`, 'heal');
-  };
-
   const hpPercent = Math.max(0, (currentHp / maxHp) * 100);
   const monsterHpPercent = currentMonster
     ? (currentMonster.currentHp / currentMonster.maxHp) * 100
     : 0;
 
+  // Filter locations by level
+  const availableLocations = LOCATIONS.filter((loc) => characterLevel >= loc.levelRange[0]);
+
   return (
     <div className="space-y-4">
-      {/* Location Selector */}
-      <div className="flex gap-2 flex-wrap">
-        {LOCATIONS.map((loc, index) => (
-          <button
-            key={loc.id}
-            onClick={() => !isHunting && setSelectedLocation(index)}
-            disabled={isHunting || characterLevel < loc.levelRange[0]}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
-              selectedLocation === index
-                ? 'bg-yellow-500 text-gray-900'
-                : characterLevel < loc.levelRange[0]
-                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                : 'bg-gray-700 hover:bg-gray-600'
-            }`}
-          >
-            {loc.name} (Lv.{loc.levelRange[0]}-{loc.levelRange[1]})
-          </button>
-        ))}
+      {/* Location Selector - Dropdown */}
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-gray-400">Location:</label>
+        <select
+          value={selectedLocation}
+          onChange={(e) => !isHunting && setSelectedLocation(Number(e.target.value))}
+          disabled={isHunting}
+          className="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-yellow-500 disabled:opacity-50"
+        >
+          {LOCATIONS.map((loc, index) => (
+            <option
+              key={loc.id}
+              value={index}
+              disabled={characterLevel < loc.levelRange[0]}
+            >
+              {loc.name} (Lv.{loc.levelRange[0]}-{loc.levelRange[1]})
+              {characterLevel < loc.levelRange[0] ? ' - Locked' : ''}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Combat Area */}
@@ -241,34 +319,65 @@ export default function HuntingPanel({
           </div>
         </div>
 
-        {/* Monster Display */}
-        {currentMonster ? (
-          <div className="text-center py-4">
-            <div className="text-4xl mb-2">👹</div>
-            <div className="text-lg font-bold">{currentMonster.name}</div>
-            <div className="text-sm text-gray-400">Level {currentMonster.level}</div>
-            <div className="mt-2 max-w-xs mx-auto">
-              <div className="flex justify-between text-xs mb-1">
-                <span>HP</span>
-                <span>{currentMonster.currentHp} / {currentMonster.maxHp}</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-3">
-                <div
-                  className="bg-green-500 h-3 rounded-full transition-all duration-300"
-                  style={{ width: `${monsterHpPercent}%` }}
-                />
+        {/* Monster Display with Floating Damage */}
+        <div className="relative">
+          {isDead ? (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-2">💀</div>
+              <div className="text-red-500 font-bold text-lg">You are dead!</div>
+              <div className="text-gray-400 mt-2">
+                Respawning in <span className="text-yellow-400 font-bold">{respawnTimer}</span> seconds...
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            {isHunting ? 'Spawning monster...' : 'Select a location and start hunting!'}
-          </div>
-        )}
+          ) : currentMonster ? (
+            <div className="text-center py-4 relative">
+              {/* Floating Damage Numbers */}
+              {floatingDamages.map((fd) => (
+                <div
+                  key={fd.id}
+                  className={`absolute text-xl font-bold pointer-events-none animate-float-up ${
+                    fd.type === 'excellent' ? 'text-green-400' :
+                    fd.type === 'critical' ? 'text-cyan-400' :
+                    'text-yellow-400'
+                  }`}
+                  style={{
+                    left: `${fd.x}%`,
+                    top: `${fd.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                >
+                  {fd.damage}
+                  {fd.type === 'excellent' && <span className="text-xs ml-1">EXC!</span>}
+                  {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
+                </div>
+              ))}
 
-        {/* Controls */}
+              <div className="text-4xl mb-2">👹</div>
+              <div className="text-lg font-bold">{currentMonster.name}</div>
+              <div className="text-sm text-gray-400">Level {currentMonster.level}</div>
+              <div className="mt-2 max-w-xs mx-auto">
+                <div className="flex justify-between text-xs mb-1">
+                  <span>HP</span>
+                  <span>{currentMonster.currentHp} / {currentMonster.maxHp}</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-3">
+                  <div
+                    className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${monsterHpPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              {isHunting ? 'Spawning monster...' : 'Select a location and start hunting!'}
+            </div>
+          )}
+        </div>
+
+        {/* Controls - No Heal button */}
         <div className="flex gap-2 justify-center mt-4">
-          {!isHunting ? (
+          {!isHunting && !isDead ? (
             <button
               onClick={startHunting}
               disabled={currentHp <= 0}
@@ -276,21 +385,14 @@ export default function HuntingPanel({
             >
               Start Hunting
             </button>
-          ) : (
+          ) : !isDead ? (
             <button
               onClick={stopHunting}
               className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded font-bold"
             >
               Stop Hunting
             </button>
-          )}
-          <button
-            onClick={healCharacter}
-            disabled={currentHp >= maxHp}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Heal
-          </button>
+          ) : null}
         </div>
 
         {/* Stats */}
@@ -319,6 +421,23 @@ export default function HuntingPanel({
           ))}
         </div>
       </div>
+
+      {/* CSS for floating animation */}
+      <style jsx>{`
+        @keyframes float-up {
+          0% {
+            opacity: 1;
+            transform: translate(-50%, -50%) translateY(0);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(-50%, -50%) translateY(-40px);
+          }
+        }
+        .animate-float-up {
+          animation: float-up 1s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }
