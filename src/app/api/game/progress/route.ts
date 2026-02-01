@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId, unauthorizedResponse, errorResponse } from '@/lib/auth-utils';
-import {
-  getCharacterById,
-  getLatestCharacter,
-  updateCharacterProgress,
-  calculateLevelUp,
-} from '@/lib/services/character.service';
+import { getCharacterById, getLatestCharacter } from '@/lib/services/character.service';
 import prisma from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
@@ -16,10 +11,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       character_id,
-      experience_gained,
-      zen_gained,
+      experience,
+      zen,
+      level,
+      levelup_points,
       monsters_killed,
-      playtime_seconds,
     } = body;
 
     let character;
@@ -33,47 +29,41 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
-    // Calculate new experience and potential level ups
-    const currentExp = character.experience;
-    const newTotalExp = currentExp + BigInt(experience_gained || 0);
+    // Update character with provided values
+    const updateData: Record<string, unknown> = {
+      lastPlayed: new Date(),
+    };
 
-    const levelUpResult = calculateLevelUp(character.level, newTotalExp);
-
-    // Update character
-    await updateCharacterProgress(character.id, {
-      level: levelUpResult.newLevel,
-      experience: levelUpResult.remainingExp,
-      zen: character.zen + BigInt(zen_gained || 0),
-      monstersKilled: character.monstersKilled + (monsters_killed || 0),
-      totalPlaytime: character.totalPlaytime + (playtime_seconds || 0),
-    });
-
-    // Add levelup points if leveled up
-    if (levelUpResult.pointsGained > 0) {
-      await prisma.playerCharacter.update({
-        where: { id: character.id },
-        data: {
-          levelupPoints: { increment: levelUpResult.pointsGained },
-        },
-      });
+    if (experience !== undefined) {
+      updateData.experience = BigInt(experience);
+    }
+    if (zen !== undefined) {
+      updateData.zen = BigInt(zen);
+    }
+    if (level !== undefined) {
+      updateData.level = level;
+    }
+    if (levelup_points !== undefined) {
+      updateData.levelupPoints = levelup_points;
+    }
+    if (monsters_killed !== undefined) {
+      updateData.monstersKilled = monsters_killed;
     }
 
-    // Return updated character data
-    const updatedCharacter = await getCharacterById(character.id, userId);
+    const updatedCharacter = await prisma.playerCharacter.update({
+      where: { id: character.id },
+      data: updateData,
+    });
 
     return NextResponse.json({
       success: true,
-      leveledUp: levelUpResult.newLevel > character.level,
-      levelsGained: levelUpResult.newLevel - character.level,
-      pointsGained: levelUpResult.pointsGained,
       character: {
-        id: updatedCharacter!.id,
-        level: updatedCharacter!.level,
-        experience: updatedCharacter!.experience.toString(),
-        zen: updatedCharacter!.zen.toString(),
-        monstersKilled: updatedCharacter!.monstersKilled,
-        totalPlaytime: updatedCharacter!.totalPlaytime,
-        levelupPoints: updatedCharacter!.levelupPoints,
+        id: updatedCharacter.id,
+        level: updatedCharacter.level,
+        experience: updatedCharacter.experience.toString(),
+        zen: updatedCharacter.zen.toString(),
+        monstersKilled: updatedCharacter.monstersKilled,
+        levelupPoints: updatedCharacter.levelupPoints,
       },
     });
   } catch (error) {

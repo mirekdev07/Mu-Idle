@@ -69,11 +69,7 @@ function generateRandomOption(category: number | null, rarity: ItemRarity): Item
 }
 
 export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedItem | null> {
-  // 10% drop rate
-  const dropRoll = Math.floor(Math.random() * 100) + 1;
-  if (dropRoll > 10) {
-    return null;
-  }
+  // Drop rate is handled by caller - this always returns an item if one exists
 
   // Get random item within level range
   const minLevel = Math.max(1, monsterLevel - 4);

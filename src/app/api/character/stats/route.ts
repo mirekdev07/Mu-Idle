@@ -50,22 +50,12 @@ export async function GET(request: NextRequest) {
         levelupPoints: character.levelupPoints,
       },
       stats: {
-        min_damage: stats.minDamage,
-        max_damage: stats.maxDamage,
-        physical_defense: stats.physicalDefense,
-        attack_rate: stats.attackRate,
-        attack_speed: stats.attackSpeed,
-        defense_rate: stats.defenseRate,
-        block_rate: stats.blockRate,
-        max_hp: stats.maxHp,
-        max_mana: stats.maxMana,
-        critical_rate: stats.criticalRate,
-        critical_damage: stats.criticalDamage,
-        life_steal: stats.lifeSteal,
-        exp_bonus: stats.expBonus,
-        zen_bonus: stats.zenBonus,
-        excellent_damage: stats.excellentDamage,
-        hp_recovery: stats.hpRecovery,
+        minDamage: stats.minDamage,
+        maxDamage: stats.maxDamage,
+        physicalDefense: stats.physicalDefense,
+        attackSpeed: stats.attackSpeed,
+        maxHp: stats.maxHp,
+        criticalRate: stats.criticalRate,
       },
       bonuses,
     });
@@ -105,10 +95,38 @@ export async function POST(request: NextRequest) {
       return errorResponse(result.message ?? 'Failed to add stat point');
     }
 
+    // Get updated character and stats
+    const updatedCharacter = await getCharacterById(character.id, userId);
+    if (!updatedCharacter) {
+      return errorResponse('Character not found after update', 404);
+    }
+
+    const bonuses = await getEquipmentBonuses(updatedCharacter.id);
+    const stats = calculateStats(
+      {
+        id: updatedCharacter.id,
+        level: updatedCharacter.level,
+        damage: updatedCharacter.damage,
+        defense: updatedCharacter.defense,
+        vitality: updatedCharacter.vitality,
+        blockStat: updatedCharacter.blockStat,
+        attackSpeedStat: updatedCharacter.attackSpeedStat,
+      },
+      bonuses
+    );
+
     return NextResponse.json({
       success: true,
-      stat_name,
-      new_value: result.newValue,
+      newValue: result.newValue,
+      remainingPoints: updatedCharacter.levelupPoints,
+      stats: {
+        minDamage: stats.minDamage,
+        maxDamage: stats.maxDamage,
+        physicalDefense: stats.physicalDefense,
+        attackSpeed: stats.attackSpeed,
+        maxHp: stats.maxHp,
+        criticalRate: stats.criticalRate,
+      },
     });
   } catch (error) {
     console.error('Add stat point error:', error);

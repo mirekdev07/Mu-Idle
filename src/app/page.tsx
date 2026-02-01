@@ -101,7 +101,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!gameData) return;
 
-    const saveInterval = setInterval(async () => {
+    const saveProgress = async () => {
       try {
         await fetch('/api/game/progress', {
           method: 'POST',
@@ -111,14 +111,27 @@ export default function HomePage() {
             experience: gameData.character.experience,
             zen: gameData.character.zen,
             level: gameData.character.level,
+            levelup_points: gameData.character.levelupPoints,
           }),
         });
+        console.log('Progress saved');
       } catch (err) {
         console.error('Auto-save failed:', err);
       }
-    }, 30000);
+    };
 
-    return () => clearInterval(saveInterval);
+    const saveInterval = setInterval(saveProgress, 30000);
+
+    // Also save on page unload
+    const handleBeforeUnload = () => {
+      saveProgress();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(saveInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, [gameData]);
 
   const handleHpChange = async (newHp: number) => {
@@ -232,8 +245,18 @@ export default function HomePage() {
             [statName]: data.newValue,
             levelupPoints: data.remainingPoints,
           },
-          stats: data.stats,
+          stats: {
+            ...gameData.stats,
+            minDamage: data.stats.minDamage,
+            maxDamage: data.stats.maxDamage,
+            physicalDefense: data.stats.physicalDefense,
+            attackSpeed: data.stats.attackSpeed,
+            maxHp: data.stats.maxHp,
+            criticalRate: data.stats.criticalRate,
+          },
         });
+      } else {
+        console.error('Add stat failed:', data.message);
       }
     } catch (err) {
       console.error('Add stat failed:', err);

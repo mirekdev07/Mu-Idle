@@ -10,15 +10,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { monster_level, character_id } = body;
+    // Accept both monster_level and character_level
+    const monsterLevel = body.monster_level || body.character_level;
+    const characterId = body.character_id;
 
-    if (!monster_level || typeof monster_level !== 'number') {
+    if (!monsterLevel || typeof monsterLevel !== 'number') {
       return errorResponse('Monster level required');
     }
 
     let character;
-    if (character_id) {
-      character = await getCharacterById(character_id, userId);
+    if (characterId) {
+      character = await getCharacterById(characterId, userId);
     }
     if (!character) {
       character = await getLatestCharacter(userId);
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Try to get a drop
-    const droppedItem = await getRandomItemDrop(monster_level);
+    const droppedItem = await getRandomItemDrop(monsterLevel);
 
     if (!droppedItem) {
       return NextResponse.json({
