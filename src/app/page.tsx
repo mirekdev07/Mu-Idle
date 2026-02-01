@@ -159,27 +159,49 @@ export default function HomePage() {
     const newZen = BigInt(gameData.character.zen) + zen;
 
     // Check for level up (simple formula: level * 100 exp needed)
-    const expNeeded = BigInt(gameData.character.level * 100);
     let newLevel = gameData.character.level;
     let remainingExp = newExp;
     let newPoints = gameData.character.levelupPoints;
+    let leveledUp = false;
 
     while (remainingExp >= BigInt(newLevel * 100)) {
       remainingExp -= BigInt(newLevel * 100);
       newLevel++;
       newPoints += 5; // 5 points per level
+      leveledUp = true;
     }
+
+    const newCharacterData = {
+      ...gameData.character,
+      experience: remainingExp.toString(),
+      zen: newZen.toString(),
+      level: newLevel,
+      levelupPoints: newPoints,
+    };
 
     setGameData({
       ...gameData,
-      character: {
-        ...gameData.character,
-        experience: remainingExp.toString(),
-        zen: newZen.toString(),
-        level: newLevel,
-        levelupPoints: newPoints,
-      },
+      character: newCharacterData,
     });
+
+    // Save immediately on level up so stat points are available
+    if (leveledUp) {
+      try {
+        await fetch('/api/game/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            character_id: gameData.character.id,
+            experience: remainingExp.toString(),
+            zen: newZen.toString(),
+            level: newLevel,
+            levelup_points: newPoints,
+          }),
+        });
+      } catch (err) {
+        console.error('Failed to save level up:', err);
+      }
+    }
   };
 
   const handleItemDrop = async () => {
