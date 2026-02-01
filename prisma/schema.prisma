@@ -1,0 +1,160 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== AUTH ====================
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique @db.VarChar(50)
+  email        String    @unique @db.VarChar(100)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLogin    DateTime? @map("last_login")
+  isActive     Boolean   @default(true) @map("is_active")
+
+  characters PlayerCharacter[]
+
+  @@index([username])
+  @@index([email])
+  @@map("users")
+}
+
+// ==================== GAME ====================
+
+model PlayerCharacter {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  characterName  String   @map("character_name") @db.VarChar(50)
+  classType      String   @default("Dark Knight") @map("class_type") @db.VarChar(20)
+  level          Int      @default(1)
+  experience     BigInt   @default(0)
+  zen            BigInt   @default(0)
+  totalPlaytime  Int      @default(0) @map("total_playtime") // in seconds
+  monstersKilled Int      @default(0) @map("monsters_killed")
+  createdAt      DateTime @default(now()) @map("created_at")
+  lastPlayed     DateTime @default(now()) @map("last_played")
+
+  // Character stats (simplified - all start at 25)
+  damage         Int @default(25)
+  defense        Int @default(25)
+  vitality       Int @default(25)
+  blockStat      Int @default(25) @map("block_stat")
+  attackSpeedStat Int @default(25) @map("attack_speed_stat")
+  levelupPoints  Int @default(0) @map("levelup_points")
+
+  // HP system
+  currentHp Int? @map("current_hp")
+
+  // Reset system (available at level 400+)
+  resetCount Int @default(0) @map("reset_count")
+
+  // Relations
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inventory  PlayerInventory[]
+  equipment  CharacterEquipment[]
+  statistics GameStatistic[]
+
+  @@unique([userId, characterName])
+  @@index([userId])
+  @@map("player_characters")
+}
+
+model PlayerInventory {
+  id              Int     @id @default(autoincrement())
+  characterId     Int     @map("character_id")
+  slotIndex       Int     @map("slot_index") // 0-23 (24 slots)
+  itemName        String? @map("item_name") @db.VarChar(100)
+  itemType        String? @map("item_type") @db.VarChar(50)
+  itemEmoji       String? @map("item_emoji") @db.VarChar(10)
+  itemRarity      String? @default("common") @map("item_rarity") @db.VarChar(20)
+
+  // Item stats
+  damageMin       Int @default(0) @map("damage_min")
+  damageMax       Int @default(0) @map("damage_max")
+  attackSpeed     Int @default(0) @map("attack_speed")
+  defenseValue    Int @default(0) @map("defense")
+  itemLevel       Int @default(1) @map("item_level")
+  category        Int @default(0)
+
+  // Enhancement system
+  enhancementLevel Int     @default(0) @map("enhancement_level")
+  itemOptions      String? @map("item_options") @db.Text // JSON string for special options
+
+  // Relations
+  character PlayerCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, slotIndex])
+  @@index([characterId])
+  @@map("player_inventory")
+}
+
+model CharacterEquipment {
+  id          Int      @id @default(autoincrement())
+  characterId Int      @map("character_id")
+  slot        Int      // 0=weapon, 1=shield, 2=helm, 3=armor, 4=pants, 5=gloves, 6=boots
+  itemId      Int?     @map("item_id")
+  itemType    String?  @map("item_type") @db.VarChar(50)
+  itemName    String?  @map("item_name") @db.VarChar(100)
+  itemEmoji   String?  @map("item_emoji") @db.VarChar(10)
+  itemRarity  String?  @default("common") @map("item_rarity") @db.VarChar(20)
+
+  // Item stats
+  damageMin   Int @default(0) @map("damage_min")
+  damageMax   Int @default(0) @map("damage_max")
+  attackSpeed Int @default(0) @map("attack_speed")
+  defenseValue Int @default(0) @map("defense")
+  itemLevel   Int @default(1) @map("item_level")
+
+  // Enhancement system
+  enhancementLevel Int     @default(0) @map("enhancement_level")
+  itemOptions      String? @map("item_options") @db.Text // JSON string
+
+  equippedAt DateTime @default(now()) @map("equipped_at")
+
+  // Relations
+  character PlayerCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, slot])
+  @@index([characterId])
+  @@map("character_equipment")
+}
+
+model Item {
+  id         Int      @id @default(autoincrement())
+  type       Int
+  slot       Int
+  name       String   @db.VarChar(100)
+  level      Int
+  damageMin  Int      @default(0) @map("damage_min")
+  damageMax  Int      @default(0) @map("damage_max")
+  attackSpeed Int     @default(0) @map("attack_speed")
+  defenseValue Int    @default(0) @map("defense")
+  category   Int
+  imagePath  String?  @map("image_path") @db.VarChar(255)
+  emoji      String?  @db.VarChar(10)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("items")
+}
+
+model GameStatistic {
+  id          Int    @id @default(autoincrement())
+  characterId Int    @map("character_id")
+  statName    String @map("stat_name") @db.VarChar(50)
+  statValue   BigInt @default(0) @map("stat_value")
+
+  // Relations
+  character PlayerCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, statName])
+  @@index([characterId])
+  @@map("game_statistics")
+}
