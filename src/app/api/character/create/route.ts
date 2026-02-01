@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
     const result = createCharacterSchema.safeParse(body);
     if (!result.success) {
-      return errorResponse(result.error.errors[0].message);
+      return errorResponse(result.error.issues[0].message);
     }
 
     const { character_name, class_type } = result.data;

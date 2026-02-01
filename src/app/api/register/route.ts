@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const result = registerSchema.safeParse(body);
     if (!result.success) {
       return NextResponse.json(
-        { success: false, message: result.error.errors[0].message },
+        { success: false, message: result.error.issues[0].message },
         { status: 400 }
       );
     }
