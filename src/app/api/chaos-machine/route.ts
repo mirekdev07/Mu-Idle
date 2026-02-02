@@ -13,6 +13,7 @@ interface MixRecipe {
     devilsKey?: number;
     devilsEye?: number;
     jewelOfChaos?: number;
+    zen?: number;
   };
   result: {
     field: 'bloodCastleTicket' | 'devilSquareTicket';
@@ -28,6 +29,7 @@ const RECIPES: Record<MixType, MixRecipe> = {
       scrollOfArchangel: 1,
       bloodBone: 1,
       jewelOfChaos: 1,
+      zen: 300000,
     },
     result: {
       field: 'bloodCastleTicket',
@@ -41,6 +43,7 @@ const RECIPES: Record<MixType, MixRecipe> = {
       devilsKey: 1,
       devilsEye: 1,
       jewelOfChaos: 1,
+      zen: 300000,
     },
     result: {
       field: 'devilSquareTicket',
@@ -92,6 +95,9 @@ export async function POST(request: NextRequest) {
     if (req.jewelOfChaos && character.jewelOfChaos < req.jewelOfChaos) {
       return errorResponse('Not enough Jewel of Chaos');
     }
+    if (req.zen && character.zen < BigInt(req.zen)) {
+      return errorResponse('Not enough Zen');
+    }
 
     // Consume materials and create result
     const updateData: Record<string, { decrement?: number; increment?: number }> = {};
@@ -111,6 +117,9 @@ export async function POST(request: NextRequest) {
     if (req.jewelOfChaos) {
       updateData.jewelOfChaos = { decrement: req.jewelOfChaos };
     }
+    if (req.zen) {
+      updateData.zen = { decrement: req.zen };
+    }
 
     // Check success (currently all 100%)
     const success = Math.random() < recipe.successRate;
@@ -123,6 +132,7 @@ export async function POST(request: NextRequest) {
       where: { id: character.id },
       data: updateData,
       select: {
+        zen: true,
         jewelOfChaos: true,
         scrollOfArchangel: true,
         bloodBone: true,
@@ -137,6 +147,7 @@ export async function POST(request: NextRequest) {
       success: true,
       mixSuccess: success,
       resultName: recipe.name,
+      zen: updated.zen.toString(),
       materials: {
         chaos: updated.jewelOfChaos,
         archangel: updated.scrollOfArchangel,

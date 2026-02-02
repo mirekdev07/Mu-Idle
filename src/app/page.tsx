@@ -217,16 +217,23 @@ export default function HomePage() {
     setLastExpUpdate({ exp: newExp, zen: newZen, time: now });
 
     // Check for level up (simple formula: level * 100 exp needed)
+    // Max level is 400
+    const MAX_LEVEL = 400;
     let newLevel = gameData.character.level;
     let remainingExp = newExp;
     let newPoints = gameData.character.levelupPoints;
     let leveledUp = false;
 
-    while (remainingExp >= BigInt(newLevel * 100)) {
+    while (remainingExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
       remainingExp -= BigInt(newLevel * 100);
       newLevel++;
       newPoints += 5; // 5 points per level
       leveledUp = true;
+    }
+
+    // At max level, cap experience at 0 (no more exp needed)
+    if (newLevel >= MAX_LEVEL) {
+      remainingExp = 0n;
     }
 
     let newCharacterData = {
@@ -445,6 +452,48 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error('Add stat failed:', err);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!gameData || gameData.character.level < 400) return;
+
+    const nextResetNumber = gameData.character.resetCount + 1;
+    const bonusPoints = 500 * nextResetNumber;
+
+    const confirmed = await showConfirm({
+      title: 'Reset Character',
+      message: `Reset to level 1 and receive ${bonusPoints.toLocaleString()} bonus stat points? (Reset #${nextResetNumber}) Your Zen, items, and equipment will be kept.`,
+      confirmText: 'Reset',
+      cancelText: 'Cancel',
+      confirmColor: 'yellow',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch('/api/character/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: gameData.character.id,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadGameData();
+        await showInfo({
+          title: 'Reset Complete!',
+          message: `Your character has been reset to level 1. You received ${bonusPoints.toLocaleString()} bonus stat points!`,
+          buttonText: 'Continue',
+          color: 'yellow',
+        });
+      } else {
+        alert(data.message || 'Reset failed');
+      }
+    } catch (err) {
+      console.error('Reset failed:', err);
     }
   };
 
@@ -868,6 +917,14 @@ export default function HomePage() {
               >
                 Rebuild (1M Zen)
               </button>
+              {character.level >= 400 && (
+                <button
+                  onClick={handleReset}
+                  className="w-full mt-2 py-2 bg-purple-600 hover:bg-purple-500 rounded text-sm font-bold animate-pulse"
+                >
+                  ⭐ RESET CHARACTER ⭐
+                </button>
+              )}
             </div>
 
             {/* Combat Stats */}
@@ -912,6 +969,7 @@ export default function HomePage() {
               attackSpeed={totalStats.attackSpeed}
               lifeSteal={equipmentBonuses.life_steal}
               reflectDamage={equipmentBonuses.reflect_damage}
+              expBonus={equipmentBonuses.exp_bonus}
               onHpChange={handleHpChange}
               onExpGain={handleExpGain}
               onItemDrop={handleItemDrop}
@@ -996,6 +1054,7 @@ export default function HomePage() {
                 attackSpeed={totalStats.attackSpeed}
                 lifeSteal={equipmentBonuses.life_steal}
                 reflectDamage={equipmentBonuses.reflect_damage}
+                expBonus={equipmentBonuses.exp_bonus}
                 onHpChange={handleHpChange}
                 onExpGain={handleExpGain}
                 onItemDrop={handleItemDrop}
@@ -1105,6 +1164,14 @@ export default function HomePage() {
                   >
                     Rebuild (1M Zen)
                   </button>
+                  {character.level >= 400 && (
+                    <button
+                      onClick={handleReset}
+                      className="w-full mt-2 py-3 bg-purple-600 hover:bg-purple-500 rounded text-lg font-bold animate-pulse"
+                    >
+                      ⭐ RESET CHARACTER ⭐
+                    </button>
+                  )}
                 </div>
 
                 {/* Combat Stats */}

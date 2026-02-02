@@ -134,8 +134,10 @@ export async function resetCharacter(
     return { success: false, message: 'Character must be level 400+ to reset' };
   }
 
-  // Bonus points from reset - 500 free stat points
-  const bonusPoints = 500;
+  // Bonus points scale with reset count: 500 * resetNumber
+  // resetCount is 0-indexed, so next reset will be resetCount + 1
+  const nextResetNumber = character.resetCount + 1;
+  const bonusPoints = 500 * nextResetNumber;
 
   await prisma.playerCharacter.update({
     where: { id: characterId },

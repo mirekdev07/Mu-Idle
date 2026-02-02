@@ -85,19 +85,43 @@ export async function GET(request: NextRequest) {
       const safeOfflineZen = (offlineZen > 0 && offlineZen < 1000000000) ? offlineZen : 0;
 
       if (safeOfflineExp > 0 || safeOfflineZen > 0) {
-        // Add rewards to character and reset heartbeat
+        // Calculate new experience
+        let newExp = character.experience + BigInt(safeOfflineExp);
+        let newZen = character.zen + BigInt(safeOfflineZen);
+
+        // Calculate level ups (max level 400)
+        const MAX_LEVEL = 400;
+        let newLevel = character.level;
+        let newPoints = character.levelupPoints;
+
+        while (newExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
+          newExp -= BigInt(newLevel * 100);
+          newLevel++;
+          newPoints += 5;
+        }
+
+        // Cap exp at 0 if max level
+        if (newLevel >= MAX_LEVEL) {
+          newExp = 0n;
+        }
+
+        // Update character with level ups
         await prisma.playerCharacter.update({
           where: { id: character.id },
           data: {
-            experience: { increment: safeOfflineExp },
-            zen: { increment: safeOfflineZen },
+            experience: newExp,
+            zen: newZen,
+            level: newLevel,
+            levelupPoints: newPoints,
             lastHeartbeat: now,
           },
         });
 
         // Update local values for response
-        character.experience = character.experience + BigInt(safeOfflineExp);
-        character.zen = character.zen + BigInt(safeOfflineZen);
+        character.experience = newExp;
+        character.zen = newZen;
+        character.level = newLevel;
+        character.levelupPoints = newPoints;
 
         offlineRewards = {
           exp: safeOfflineExp,

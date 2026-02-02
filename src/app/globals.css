@@ -34,3 +34,19 @@ body {
 .min-h-screen {
   min-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
+
+/* Floating damage animation */
+@keyframes floatUp {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.8);
+  }
+}

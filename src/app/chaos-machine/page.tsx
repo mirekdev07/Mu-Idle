@@ -39,6 +39,7 @@ export default function ChaosMachinePage() {
     bloodCastle: 0,
     devilSquare: 0,
   });
+  const [zen, setZen] = useState<bigint>(0n);
   const [mixing, setMixing] = useState(false);
   const [mixResult, setMixResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -71,6 +72,7 @@ export default function ChaosMachinePage() {
           bloodCastle: data.character.bloodCastleTicket || 0,
           devilSquare: data.character.devilSquareTicket || 0,
         });
+        setZen(BigInt(data.character.zen || 0));
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -100,6 +102,12 @@ export default function ChaosMachinePage() {
       if (data.success) {
         setMaterials(data.materials);
         setTickets(data.tickets);
+        if (data.zen !== undefined) {
+          setZen(BigInt(data.zen));
+        } else {
+          // Deduct zen locally if not returned
+          setZen(prev => prev - 300000n);
+        }
         setMixResult({
           success: data.mixSuccess,
           message: data.mixSuccess
@@ -123,8 +131,9 @@ export default function ChaosMachinePage() {
     }
   };
 
-  const canMixBloodCastle = materials.archangel >= 1 && materials.bloodbone >= 1 && materials.chaos >= 1;
-  const canMixDevilSquare = materials.devilskey >= 1 && materials.devilseye >= 1 && materials.chaos >= 1;
+  const ZEN_REQUIRED = 300000n;
+  const canMixBloodCastle = materials.archangel >= 1 && materials.bloodbone >= 1 && materials.chaos >= 1 && zen >= ZEN_REQUIRED;
+  const canMixDevilSquare = materials.devilskey >= 1 && materials.devilseye >= 1 && materials.chaos >= 1 && zen >= ZEN_REQUIRED;
 
   if (status === 'loading' || loading) {
     return (
@@ -169,6 +178,12 @@ export default function ChaosMachinePage() {
           <div className="text-6xl mb-4">🔮</div>
           <h2 className="text-3xl font-bold text-purple-400 mb-2">Chaos Machine</h2>
           <p className="text-gray-400">Combine materials to create powerful items</p>
+        </div>
+
+        {/* Zen Display */}
+        <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 mb-6 text-center">
+          <span className="text-gray-400">Your Zen: </span>
+          <span className="text-xl text-green-400 font-bold">{zen.toLocaleString()}</span>
         </div>
 
         {/* Materials Inventory */}
@@ -272,6 +287,15 @@ export default function ChaosMachinePage() {
                   {materials.chaos}/1
                 </span>
               </div>
+              <div className="flex items-center justify-between bg-gray-900/50 rounded p-2">
+                <span className="flex items-center gap-2">
+                  <span className="text-xl">💰</span>
+                  <span className="text-green-400">Zen</span>
+                </span>
+                <span className={zen >= ZEN_REQUIRED ? 'text-green-400' : 'text-red-400'}>
+                  {zen >= ZEN_REQUIRED ? '✓' : `${zen.toLocaleString()}/300,000`}
+                </span>
+              </div>
             </div>
 
             <div className="text-center text-sm text-green-400 mb-4">Success Rate: 100%</div>
@@ -324,6 +348,15 @@ export default function ChaosMachinePage() {
                 </span>
                 <span className={materials.chaos >= 1 ? 'text-green-400' : 'text-red-400'}>
                   {materials.chaos}/1
+                </span>
+              </div>
+              <div className="flex items-center justify-between bg-gray-900/50 rounded p-2">
+                <span className="flex items-center gap-2">
+                  <span className="text-xl">💰</span>
+                  <span className="text-green-400">Zen</span>
+                </span>
+                <span className={zen >= ZEN_REQUIRED ? 'text-green-400' : 'text-red-400'}>
+                  {zen >= ZEN_REQUIRED ? '✓' : `${zen.toLocaleString()}/300,000`}
                 </span>
               </div>
             </div>

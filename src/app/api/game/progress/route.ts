@@ -38,17 +38,31 @@ export async function POST(request: NextRequest) {
       lastPlayed: new Date(),
     };
 
+    // Calculate level ups if experience is provided
+    const MAX_LEVEL = 400;
+    let newExp = experience !== undefined ? BigInt(experience) : character.experience;
+    let newLevel = level !== undefined ? level : character.level;
+    let newPoints = levelup_points !== undefined ? levelup_points : character.levelupPoints;
+
+    // Auto level up calculation
     if (experience !== undefined) {
-      updateData.experience = BigInt(experience);
+      while (newExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
+        newExp -= BigInt(newLevel * 100);
+        newLevel++;
+        newPoints += 5;
+      }
+      // Cap exp at 0 if max level
+      if (newLevel >= MAX_LEVEL) {
+        newExp = 0n;
+      }
     }
+
+    updateData.experience = newExp;
+    updateData.level = newLevel;
+    updateData.levelupPoints = newPoints;
+
     if (zen !== undefined) {
       updateData.zen = BigInt(zen);
-    }
-    if (level !== undefined) {
-      updateData.level = level;
-    }
-    if (levelup_points !== undefined) {
-      updateData.levelupPoints = levelup_points;
     }
     if (monsters_killed !== undefined) {
       updateData.monstersKilled = monsters_killed;

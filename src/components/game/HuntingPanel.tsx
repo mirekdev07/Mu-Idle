@@ -16,6 +16,7 @@ interface HuntingPanelProps {
   attackSpeed: number;
   lifeSteal?: number;
   reflectDamage?: number;
+  expBonus?: number;
   onHpChange: (newHp: number) => void;
   onExpGain: (exp: bigint, zen: bigint) => void;
   onItemDrop: (monsterLevel: number) => void;
@@ -63,6 +64,7 @@ export default function HuntingPanel({
   attackSpeed,
   lifeSteal = 0,
   reflectDamage = 0,
+  expBonus = 0,
   onHpChange,
   onExpGain,
   onItemDrop,
@@ -77,6 +79,22 @@ export default function HuntingPanel({
   const [monstersKilled, setMonstersKilled] = useState(0);
   const [floatingDamages, setFloatingDamages] = useState<FloatingDamage[]>([]);
   const [respawnCountdown, setRespawnCountdown] = useState<number | null>(null);
+  const [inEvent, setInEvent] = useState(false);
+
+  // Check if player is in event - poll localStorage
+  useEffect(() => {
+    const checkEventStatus = () => {
+      const eventActive = localStorage.getItem('inEvent') === 'true';
+      setInEvent(eventActive);
+      if (eventActive && isHunting) {
+        setIsHunting(false);
+      }
+    };
+
+    checkEventStatus();
+    const interval = setInterval(checkEventStatus, 1000);
+    return () => clearInterval(interval);
+  }, [isHunting]);
 
   const logIdRef = useRef(0);
   const damageIdRef = useRef(0);
@@ -195,7 +213,7 @@ export default function HuntingPanel({
 
     // Check if monster died
     if (newMonsterHp <= 0) {
-      const expGain = Math.floor(currentMonster.exp * 1.2); // +20% EXP bonus
+      const expGain = Math.floor(currentMonster.exp * 1.2 * (1 + expBonus / 100)); // +20% base + equipment bonus
       const zenGain = currentMonster.zen;
 
       addLog(`${currentMonster.name} defeated! +${expGain} EXP, +${zenGain} Zen`, 'exp');
@@ -464,23 +482,35 @@ export default function HuntingPanel({
         </div>
 
         {/* Controls */}
-        <div className="flex gap-2 justify-center mt-4">
-          {!isDead && !isHunting && (
-            <button
-              onClick={startHunting}
-              className="px-6 py-2 bg-green-600 hover:bg-green-500 rounded font-bold"
-            >
-              Start Hunting
-            </button>
+        <div className="flex flex-col items-center gap-2 mt-4">
+          {inEvent && (
+            <div className="text-orange-400 text-sm font-bold mb-2">
+              ⚔️ Currently in Event - Hunting disabled
+            </div>
           )}
-          {!isDead && isHunting && (
-            <button
-              onClick={stopHunting}
-              className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded font-bold"
-            >
-              Stop Hunting
-            </button>
-          )}
+          <div className="flex gap-2">
+            {!isDead && !isHunting && (
+              <button
+                onClick={startHunting}
+                disabled={inEvent}
+                className={`px-6 py-2 rounded font-bold ${
+                  inEvent
+                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-500'
+                }`}
+              >
+                Start Hunting
+              </button>
+            )}
+            {!isDead && isHunting && (
+              <button
+                onClick={stopHunting}
+                className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded font-bold"
+              >
+                Stop Hunting
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
