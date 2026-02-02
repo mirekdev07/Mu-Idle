@@ -10,6 +10,8 @@ import prisma from '@/lib/prisma';
 const OFFLINE_RATE = 0.20; // 20% of normal production
 const MAX_OFFLINE_SECONDS = 28800; // 8 hours
 const MIN_OFFLINE_SECONDS = 60; // 1 minute minimum
+const MAX_EXP_PER_SECOND = 50000; // Safety limit for exp/sec
+const MAX_ZEN_PER_SECOND = 25000; // Safety limit for zen/sec
 
 export async function GET(request: NextRequest) {
   const userId = await getCurrentUserId();
@@ -62,32 +64,44 @@ export async function GET(request: NextRequest) {
       Math.abs(now.getTime() - lastHeartbeat.getTime()) / 1000
     );
 
-    const expPerSecond = character.lastExpPerSecond || 0;
-    const zenPerSecond = character.lastZenPerSecond || 0;
+    // Sanitize exp/zen per second - must be positive, finite, and within limits
+    const rawExpPerSecond = character.lastExpPerSecond || 0;
+    const rawZenPerSecond = character.lastZenPerSecond || 0;
+
+    const expPerSecond = (Number.isFinite(rawExpPerSecond) && rawExpPerSecond > 0)
+      ? Math.min(rawExpPerSecond, MAX_EXP_PER_SECOND)
+      : 0;
+    const zenPerSecond = (Number.isFinite(rawZenPerSecond) && rawZenPerSecond > 0)
+      ? Math.min(rawZenPerSecond, MAX_ZEN_PER_SECOND)
+      : 0;
 
     if (secondsElapsed > MIN_OFFLINE_SECONDS && (expPerSecond > 0 || zenPerSecond > 0)) {
       const offlineSeconds = Math.min(secondsElapsed, MAX_OFFLINE_SECONDS);
       const offlineExp = Math.floor(expPerSecond * offlineSeconds * OFFLINE_RATE);
       const offlineZen = Math.floor(zenPerSecond * offlineSeconds * OFFLINE_RATE);
 
-      if (offlineExp > 0 || offlineZen > 0) {
+      // Extra safety: ensure values are positive and reasonable
+      const safeOfflineExp = (offlineExp > 0 && offlineExp < 1000000000) ? offlineExp : 0;
+      const safeOfflineZen = (offlineZen > 0 && offlineZen < 1000000000) ? offlineZen : 0;
+
+      if (safeOfflineExp > 0 || safeOfflineZen > 0) {
         // Add rewards to character and reset heartbeat
         await prisma.playerCharacter.update({
           where: { id: character.id },
           data: {
-            experience: { increment: offlineExp },
-            zen: { increment: offlineZen },
+            experience: { increment: safeOfflineExp },
+            zen: { increment: safeOfflineZen },
             lastHeartbeat: now,
           },
         });
 
         // Update local values for response
-        character.experience = character.experience + BigInt(offlineExp);
-        character.zen = character.zen + BigInt(offlineZen);
+        character.experience = character.experience + BigInt(safeOfflineExp);
+        character.zen = character.zen + BigInt(safeOfflineZen);
 
         offlineRewards = {
-          exp: offlineExp,
-          zen: offlineZen,
+          exp: safeOfflineExp,
+          zen: safeOfflineZen,
           seconds: offlineSeconds,
         };
       }
@@ -111,10 +125,20 @@ export async function GET(request: NextRequest) {
         currentHp: character.currentHp,
         resetCount: character.resetCount,
         monstersKilled: character.monstersKilled,
+        deaths: character.deaths,
         totalPlaytime: character.totalPlaytime,
         jewelOfBless: character.jewelOfBless,
         jewelOfSoul: character.jewelOfSoul,
         jewelOfLife: character.jewelOfLife,
+        jewelOfChaos: character.jewelOfChaos,
+        scrollOfArchangel: character.scrollOfArchangel,
+        bloodBone: character.bloodBone,
+        devilsKey: character.devilsKey,
+        devilsEye: character.devilsEye,
+        bloodCastleTicket: character.bloodCastleTicket,
+        devilSquareTicket: character.devilSquareTicket,
+        bloodCastleEntriesToday: character.bloodCastleEntriesToday,
+        devilSquareEntriesToday: character.devilSquareEntriesToday,
       },
       inventory,
       equipment,

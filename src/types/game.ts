@@ -40,6 +40,8 @@ export interface Equipment {
   pants?: Item;       // slot 4
   gloves?: Item;      // slot 5
   boots?: Item;       // slot 6
+  ring?: Item;        // slot 7
+  pendant?: Item;     // slot 8
 }
 
 export type EquipmentSlotKey = keyof Equipment;
@@ -59,6 +61,8 @@ export const EQUIPMENT_SLOTS: EquipmentSlotDef[] = [
   { key: 'pants', name: 'Pants', icon: '👖', categories: [9] },
   { key: 'gloves', name: 'Gloves', icon: '🧤', categories: [10] },
   { key: 'boots', name: 'Boots', icon: '🥾', categories: [11] },
+  { key: 'ring', name: 'Ring', icon: '💍', categories: [12] },
+  { key: 'pendant', name: 'Pendant', icon: '📿', categories: [13] },
 ];
 
 // ==================== CHARACTER TYPES ====================

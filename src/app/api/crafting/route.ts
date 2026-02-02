@@ -48,6 +48,9 @@ export async function POST(request: NextRequest) {
     let jewelField: 'jewelOfBless' | 'jewelOfSoul' | 'jewelOfLife';
     let updateData: Record<string, unknown> = {};
 
+    // Check if item is a weapon (category 0-5) or armor (6-11)
+    const isWeapon = inventoryItem.category >= 0 && inventoryItem.category <= 5;
+
     if (action === 'bless') {
       jewelField = 'jewelOfBless';
 
@@ -63,9 +66,20 @@ export async function POST(request: NextRequest) {
 
       // 100% success rate
       success = true;
-      updateData = {
-        enhancementLevel: currentLevel + 1,
-      };
+
+      // Enhancement increases actual stats: +3 damage for weapons, +2 defense for armor
+      if (isWeapon) {
+        updateData = {
+          enhancementLevel: currentLevel + 1,
+          damageMin: inventoryItem.damageMin + 3,
+          damageMax: inventoryItem.damageMax + 3,
+        };
+      } else {
+        updateData = {
+          enhancementLevel: currentLevel + 1,
+          defenseValue: inventoryItem.defenseValue + 2,
+        };
+      }
       message = `Success! Item upgraded to +${currentLevel + 1}`;
 
     } else if (action === 'soul') {
@@ -89,9 +103,19 @@ export async function POST(request: NextRequest) {
       // 70% success rate
       success = Math.random() < 0.7;
       if (success) {
-        updateData = {
-          enhancementLevel: currentLevel + 1,
-        };
+        // Enhancement increases actual stats: +3 damage for weapons, +2 defense for armor
+        if (isWeapon) {
+          updateData = {
+            enhancementLevel: currentLevel + 1,
+            damageMin: inventoryItem.damageMin + 3,
+            damageMax: inventoryItem.damageMax + 3,
+          };
+        } else {
+          updateData = {
+            enhancementLevel: currentLevel + 1,
+            defenseValue: inventoryItem.defenseValue + 2,
+          };
+        }
         message = `Success! Item upgraded to +${currentLevel + 1}`;
       } else {
         message = 'Failed! The upgrade was unsuccessful.';
@@ -115,12 +139,16 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Find existing craft_defense option
-      const existingOption = options.find(o => o.type === 'craft_defense');
+      // For weapons: add damage. For armor: add defense
+      const optionType = isWeapon ? 'craft_damage' : 'craft_defense';
+      const statName = isWeapon ? 'Damage' : 'Defense';
+
+      // Find existing craft option
+      const existingOption = options.find(o => o.type === optionType);
       const currentBonus = existingOption?.value || 0;
 
       if (currentBonus >= 16) {
-        return errorResponse('Item already has maximum craft defense bonus (+16)');
+        return errorResponse(`Item already has maximum craft ${statName.toLowerCase()} bonus (+16)`);
       }
 
       // 70% success rate
@@ -130,19 +158,29 @@ export async function POST(request: NextRequest) {
 
         if (existingOption) {
           existingOption.value = newBonus;
-          existingOption.display = `+${newBonus} Defense (Craft)`;
+          existingOption.display = `+${newBonus} ${statName} (Craft)`;
         } else {
           options.push({
-            type: 'craft_defense',
+            type: optionType,
             value: newBonus,
-            display: `+${newBonus} Defense (Craft)`,
+            display: `+${newBonus} ${statName} (Craft)`,
           });
         }
 
-        updateData = {
-          itemOptions: JSON.stringify(options),
-        };
-        message = `Success! Added +4 Defense (total: +${newBonus})`;
+        // Actually update the stats on the item
+        if (isWeapon) {
+          updateData = {
+            itemOptions: JSON.stringify(options),
+            damageMin: inventoryItem.damageMin + 4,
+            damageMax: inventoryItem.damageMax + 4,
+          };
+        } else {
+          updateData = {
+            itemOptions: JSON.stringify(options),
+            defenseValue: inventoryItem.defenseValue + 4,
+          };
+        }
+        message = `Success! Added +4 ${statName} (total: +${newBonus})`;
       } else {
         message = 'Failed! The crafting was unsuccessful.';
       }

@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       level,
       levelup_points,
       monsters_killed,
+      deaths,
       exp_per_second,
       zen_per_second,
       update_heartbeat = true, // Set to false for beforeunload saves
@@ -52,6 +53,9 @@ export async function POST(request: NextRequest) {
     if (monsters_killed !== undefined) {
       updateData.monstersKilled = monsters_killed;
     }
+    if (deaths !== undefined) {
+      updateData.deaths = deaths;
+    }
 
     // Offline rewards: save production rates
     if (exp_per_second !== undefined) {
@@ -79,6 +83,7 @@ export async function POST(request: NextRequest) {
         experience: updatedCharacter.experience.toString(),
         zen: updatedCharacter.zen.toString(),
         monstersKilled: updatedCharacter.monstersKilled,
+        deaths: updatedCharacter.deaths,
         levelupPoints: updatedCharacter.levelupPoints,
       },
     });

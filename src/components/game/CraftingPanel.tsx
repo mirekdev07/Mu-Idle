@@ -23,6 +23,9 @@ export default function CraftingPanel({
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultMessage, setResultMessage] = useState<{ text: string; success: boolean } | null>(null);
 
+  // Rings and Pendants cannot be crafted
+  const isAccessory = item && (item.category === 12 || item.category === 13);
+
   if (!item) {
     return (
       <div className="bg-gray-800 border border-gray-600 rounded-lg p-4">
@@ -33,12 +36,44 @@ export default function CraftingPanel({
     );
   }
 
+  if (isAccessory) {
+    return (
+      <div className="bg-gray-800 border border-gray-600 rounded-lg p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-yellow-400">Crafting</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white text-xl"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="bg-gray-900 rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{item.emoji}</span>
+            <div>
+              <div className="font-bold text-gray-300">{item.name}</div>
+              <div className="text-xs text-gray-400">Level {item.level}</div>
+            </div>
+          </div>
+        </div>
+        <div className="text-center text-yellow-400 p-4 bg-yellow-900/20 rounded-lg border border-yellow-700">
+          Rings and Pendants cannot be enhanced with jewels.
+        </div>
+      </div>
+    );
+  }
+
   const currentLevel = item.enhancementLevel || 0;
   const canUseBless = currentLevel < 6 && jewelOfBless > 0;
   const canUseSoul = currentLevel >= 6 && currentLevel < 9 && jewelOfSoul > 0;
 
-  // Check if item already has life bonus
-  const existingLifeBonus = item.options?.find(o => o.type === 'craft_defense')?.value || 0;
+  // Check if item is a weapon (category 0-5)
+  const isWeapon = item.category >= 0 && item.category <= 5;
+
+  // Check if item already has life bonus (damage for weapons, defense for armor)
+  const lifeOptionType = isWeapon ? 'craft_damage' : 'craft_defense';
+  const existingLifeBonus = item.options?.find(o => o.type === lifeOptionType)?.value || 0;
   const canUseLife = existingLifeBonus < 16 && jewelOfLife > 0;
 
   const handleCraft = async (action: 'bless' | 'soul' | 'life') => {
@@ -91,7 +126,7 @@ export default function CraftingPanel({
               <div className="text-xs text-blue-400">DEF: {item.defense}</div>
             )}
             {existingLifeBonus > 0 && (
-              <div className="text-xs text-orange-400">Craft Bonus: +{existingLifeBonus} DEF</div>
+              <div className="text-xs text-orange-400">Craft Bonus: +{existingLifeBonus} {isWeapon ? 'DMG' : 'DEF'}</div>
             )}
           </div>
         </div>
@@ -153,7 +188,7 @@ export default function CraftingPanel({
           </button>
         </div>
 
-        {/* Jewel of Life - Add defense option */}
+        {/* Jewel of Life - Add damage (weapons) or defense (armor) */}
         <div className={`p-3 rounded-lg border ${canUseLife ? 'border-orange-500 bg-orange-900/20' : 'border-gray-700 bg-gray-900/50 opacity-50'}`}>
           <div className="flex justify-between items-center mb-2">
             <div className="flex items-center gap-2">
@@ -163,7 +198,7 @@ export default function CraftingPanel({
             <span className="text-sm text-gray-400">({jewelOfLife} owned)</span>
           </div>
           <div className="text-xs text-gray-400 mb-2">
-            Add +4 Defense (current: +{existingLifeBonus}/16) (70% success)
+            Add +4 {isWeapon ? 'Damage' : 'Defense'} (current: +{existingLifeBonus}/16) (70% success)
             {existingLifeBonus >= 16 && <span className="text-yellow-400 ml-2">Max bonus reached!</span>}
           </div>
           <button

@@ -21,6 +21,8 @@ const EQUIPMENT_SLOT_MAP: { key: EquipmentSlotKey; categories: number[] }[] = [
   { key: 'pants', categories: [9] },
   { key: 'gloves', categories: [10] },
   { key: 'boots', categories: [11] },
+  { key: 'ring', categories: [12] },
+  { key: 'pendant', categories: [13] },
 ];
 
 interface GameActions {
@@ -140,6 +142,8 @@ export const useGameStore = create<GameState & GameActions>()(
           pants: 4,
           gloves: 5,
           boots: 6,
+          ring: 7,
+          pendant: 8,
         };
 
         try {

@@ -50,6 +50,22 @@ const items = [
   { type: 0, slot: 6, name: 'Bronze Boots', level: 12, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 4, category: 11, emoji: '🥾' },
   { type: 1, slot: 6, name: 'Dragon Boots', level: 54, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 15, category: 11, emoji: '🥾' },
   { type: 2, slot: 6, name: 'Pad Boots', level: 4, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 3, category: 11, emoji: '🥾' },
+
+  // Category 12 - Rings (min level 41, no damage/defense, only options)
+  { type: 0, slot: 7, name: 'Ring of Ice', level: 41, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 12, emoji: '💍' },
+  { type: 1, slot: 7, name: 'Ring of Poison', level: 50, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 12, emoji: '💍' },
+  { type: 2, slot: 7, name: 'Ring of Fire', level: 60, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 12, emoji: '💍' },
+  { type: 3, slot: 7, name: 'Ring of Earth', level: 70, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 12, emoji: '💍' },
+  { type: 4, slot: 7, name: 'Ring of Wind', level: 80, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 12, emoji: '💍' },
+  { type: 5, slot: 7, name: 'Ring of Magic', level: 100, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 12, emoji: '💍' },
+
+  // Category 13 - Pendants (min level 41, no damage/defense, only options)
+  { type: 0, slot: 8, name: 'Pendant of Lightning', level: 41, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 13, emoji: '📿' },
+  { type: 1, slot: 8, name: 'Pendant of Fire', level: 50, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 13, emoji: '📿' },
+  { type: 2, slot: 8, name: 'Pendant of Ice', level: 60, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 13, emoji: '📿' },
+  { type: 3, slot: 8, name: 'Pendant of Wind', level: 70, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 13, emoji: '📿' },
+  { type: 4, slot: 8, name: 'Pendant of Water', level: 80, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 13, emoji: '📿' },
+  { type: 5, slot: 8, name: 'Pendant of Ability', level: 100, damageMin: 0, damageMax: 0, attackSpeed: 0, defense: 0, category: 13, emoji: '📿' },
 ];
 
 async function main() {

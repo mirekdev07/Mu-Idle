@@ -16,24 +16,65 @@ const RARITY_COLORS: Record<string, string> = {
 };
 
 const SLOT_NAMES: Record<number, string> = {
-  0: 'Weapon',
-  1: 'Shield',
-  2: 'Helm',
-  3: 'Armor',
-  4: 'Pants',
-  5: 'Gloves',
-  6: 'Boots',
+  0: 'Weapon', 1: 'Weapon', 2: 'Weapon', 3: 'Weapon', 4: 'Weapon', 5: 'Weapon', // Categories 0-5 are weapons
+  6: 'Shield',
+  7: 'Helm',
+  8: 'Armor',
+  9: 'Pants',
+  10: 'Gloves',
+  11: 'Boots',
+  12: 'Ring',
+  13: 'Pendant',
 };
 
 export default function ItemTooltip({ item, position }: ItemTooltipProps) {
   const rarityClass = RARITY_COLORS[item.rarity || 'common'] || RARITY_COLORS.common;
 
+  // Detect mobile (small screen)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+  // Calculate position
+  const tooltipWidth = isMobile ? 180 : 220;
+  const tooltipHeight = 250;
+  const offset = isMobile ? 20 : 80; // Smaller offset on mobile
+
+  // On mobile, center the tooltip horizontally
+  let leftPos: number;
+  if (isMobile) {
+    // Center horizontally on mobile
+    leftPos = (window.innerWidth - tooltipWidth) / 2;
+  } else {
+    // Desktop: show to the right if space, otherwise left
+    const spaceOnRight = window.innerWidth - position.x;
+    const showOnRight = spaceOnRight > tooltipWidth + offset;
+    leftPos = showOnRight
+      ? position.x + offset
+      : position.x - tooltipWidth - 20;
+  }
+
+  // Clamp to screen bounds
+  leftPos = Math.max(10, Math.min(leftPos, window.innerWidth - tooltipWidth - 10));
+
+  // Calculate top position - on mobile show above or below the touch point
+  let topPos: number;
+  if (isMobile) {
+    // On mobile, show above the item if there's space, otherwise below
+    if (position.y > tooltipHeight + 60) {
+      topPos = position.y - tooltipHeight - 60;
+    } else {
+      topPos = position.y + 60;
+    }
+  } else {
+    topPos = position.y - 50;
+  }
+  topPos = Math.max(10, Math.min(topPos, window.innerHeight - tooltipHeight - 10));
+
   return (
     <div
       className={`fixed z-50 bg-gray-900 border-2 ${rarityClass} rounded-lg p-3 shadow-lg min-w-[200px] pointer-events-none`}
       style={{
-        left: Math.min(position.x + 10, window.innerWidth - 220),
-        top: Math.min(position.y + 10, window.innerHeight - 300),
+        left: leftPos,
+        top: topPos,
       }}
     >
       {/* Item Name */}
@@ -74,13 +115,6 @@ export default function ItemTooltip({ item, position }: ItemTooltipProps) {
           <span>{item.level}</span>
         </div>
       </div>
-
-      {/* Enhancement bonus */}
-      {(item.enhancementLevel ?? 0) > 0 && (
-        <div className="mt-2 pt-2 border-t border-gray-700 text-xs text-yellow-400">
-          +{(item.enhancementLevel ?? 0) * 3}% bonus stats
-        </div>
-      )}
 
       {/* Options */}
       {item.options && item.options.length > 0 && (

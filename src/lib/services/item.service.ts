@@ -20,6 +20,7 @@ export interface DroppedItem {
 const CATEGORY_EMOJIS: Record<number, string> = {
   0: '⚔️', 1: '⚔️', 2: '⚔️', 3: '⚔️', 4: '⚔️', 5: '⚔️', // Weapons
   6: '🛡️', 7: '⛑️', 8: '🦺', 9: '👖', 10: '🧤', 11: '🥾',
+  12: '💍', 13: '📿', // Ring, Pendant
 };
 
 function getItemEmoji(category: number): string {
@@ -50,6 +51,13 @@ function generateRandomOption(category: number | null, rarity: ItemRarity): Item
     allOptions.push({ type: 'max_hp', value: 5, display: '+5% Max HP' });
     allOptions.push({ type: 'damage_decrease', value: 4, display: 'Damage Decrease +4%' });
     allOptions.push({ type: 'reflect_damage', value: 5, display: 'Reflect Damage +5%' });
+  }
+
+  // Rings and Pendants (categories 12-13) get all general options plus some special ones
+  if (category !== null && (category === 12 || category === 13)) {
+    allOptions.push({ type: 'hp_recovery', value: 5, display: '+5% HP Recovery' });
+    allOptions.push({ type: 'max_hp', value: 5, display: '+5% Max HP' });
+    allOptions.push({ type: 'critical_damage', value: 20, display: '+20% Critical Damage' });
   }
 
   // Uncommon = 1 option, Rare = 2 options
@@ -90,28 +98,34 @@ export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedIt
 
   const randomItem = items[Math.floor(Math.random() * items.length)];
 
-  // Roll for enhancement level (0 to 4)
-  // 50% +0, 25% +1, 15% +2, 7% +3, 3% +4
-  const enhanceRoll = Math.floor(Math.random() * 100) + 1;
+  // Check item type
+  const isWeapon = randomItem.category >= 0 && randomItem.category <= 5;
+  const isArmor = randomItem.category >= 6 && randomItem.category <= 11;
+  const isAccessory = randomItem.category === 12 || randomItem.category === 13; // Ring or Pendant
+
+  // Roll for enhancement level (0 to 4) - only for weapons and armor, not accessories
   let enhancement = 0;
-  if (enhanceRoll <= 3) {
-    enhancement = 4;
-  } else if (enhanceRoll <= 10) {
-    enhancement = 3;
-  } else if (enhanceRoll <= 25) {
-    enhancement = 2;
-  } else if (enhanceRoll <= 50) {
-    enhancement = 1;
+  if (!isAccessory) {
+    const enhanceRoll = Math.floor(Math.random() * 100) + 1;
+    if (enhanceRoll <= 3) {
+      enhancement = 4;
+    } else if (enhanceRoll <= 10) {
+      enhancement = 3;
+    } else if (enhanceRoll <= 25) {
+      enhancement = 2;
+    } else if (enhanceRoll <= 50) {
+      enhancement = 1;
+    }
   }
 
-  // Apply enhancement bonuses (+4 per level)
-  const bonus = enhancement * 4;
-  const isWeapon = randomItem.category >= 0 && randomItem.category <= 5;
+  // Apply enhancement bonuses: +3 damage per level for weapons, +2 defense per level for armor
+  const damageBonus = isWeapon ? enhancement * 3 : 0;
+  const defenseBonus = isArmor ? enhancement * 2 : 0;
 
-  // Weapons get damage bonus, Armor gets defense bonus (never both)
-  const damageMin = isWeapon ? randomItem.damageMin + bonus : 0;
-  const damageMax = isWeapon ? randomItem.damageMax + bonus : 0;
-  const defense = isWeapon ? 0 : randomItem.defenseValue + bonus;
+  // Weapons get damage bonus, Armor gets defense bonus, Accessories get neither
+  const damageMin = isWeapon ? randomItem.damageMin + damageBonus : 0;
+  const damageMax = isWeapon ? randomItem.damageMax + damageBonus : 0;
+  const defense = isArmor ? randomItem.defenseValue + defenseBonus : 0;
   // Store base name only - enhancement is displayed separately via enhancementLevel
   const name = randomItem.name.replace(/\s*\+\d+$/, '');
 

@@ -11,6 +11,7 @@ interface RankingEntry {
   level: number;
   resetCount: number;
   monstersKilled: number;
+  deaths: number;
 }
 
 export default function RankingPage() {
@@ -99,6 +100,9 @@ export default function RankingPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Kills
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  Deaths
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
@@ -148,12 +152,15 @@ export default function RankingPage() {
                   <td className="px-4 py-3 whitespace-nowrap text-gray-400">
                     {entry.monstersKilled.toLocaleString()}
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-red-400">
+                    {entry.deaths.toLocaleString()}
+                  </td>
                 </tr>
               ))}
               {ranking.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-gray-500"
                   >
                     No players found

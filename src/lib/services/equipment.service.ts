@@ -3,7 +3,7 @@ import { Equipment, Item, ItemOption, ItemRarity, EquipmentSlotKey } from '@/typ
 import { getEquipmentBonuses } from './stats.service';
 import { getEmptySlot } from './inventory.service';
 
-const SLOT_NAMES: EquipmentSlotKey[] = ['weapon', 'shield', 'helm', 'armor', 'pants', 'gloves', 'boots'];
+const SLOT_NAMES: EquipmentSlotKey[] = ['weapon', 'shield', 'helm', 'armor', 'pants', 'gloves', 'boots', 'ring', 'pendant'];
 
 // Map category to equipment slot
 function getEquipmentSlotFromCategory(category: number): number | null {
@@ -14,13 +14,15 @@ function getEquipmentSlotFromCategory(category: number): number | null {
   if (category === 9) return 4;  // Pants
   if (category === 10) return 5; // Gloves
   if (category === 11) return 6; // Boots
+  if (category === 12) return 7; // Ring
+  if (category === 13) return 8; // Pendant
   return null;
 }
 
 // Map equipment slot to category (for unequip)
 function getCategoryFromSlot(slot: number): number {
   const categoryMap: Record<number, number> = {
-    0: 0, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11,
+    0: 0, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12, 8: 13,
   };
   return categoryMap[slot] ?? 0;
 }
@@ -49,7 +51,7 @@ export async function getEquipment(characterId: number): Promise<Equipment> {
         id: `eq_${item.id}`,
         name: item.itemName ?? '',
         type: item.itemType ?? '',
-        category: slotIndex === 0 ? 0 : slotIndex + 5,
+        category: getCategoryFromSlot(slotIndex),
         level: item.itemLevel,
         damage_min: item.damageMin,
         damage_max: item.damageMax,

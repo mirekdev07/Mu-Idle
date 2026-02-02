@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
       level: char.level,
       resetCount: char.resetCount,
       monstersKilled: char.monstersKilled,
+      deaths: char.deaths,
     }));
 
     return NextResponse.json({

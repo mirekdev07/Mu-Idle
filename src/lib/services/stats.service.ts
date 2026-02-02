@@ -150,8 +150,8 @@ export function calculateStats(
   // Block Rate: block stat * 0.12
   const blockRate = Math.floor(character.blockStat * 0.12);
 
-  // Max HP: base 100 + (vitality * 7.5) + (level * 10)
-  let maxHp = Math.floor(100 + character.vitality * 7.5 + character.level * 10);
+  // Max HP: base 100 + (vitality * 5) + (level * 3)
+  let maxHp = Math.floor(100 + character.vitality * 5 + character.level * 3);
   if (bonuses.max_hp > 0) {
     maxHp = Math.floor(maxHp * (1 + bonuses.max_hp / 100));
   }

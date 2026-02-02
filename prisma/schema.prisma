@@ -56,6 +56,9 @@ model PlayerCharacter {
   // Reset system (available at level 400+)
   resetCount Int @default(0) @map("reset_count")
 
+  // Death tracking
+  deaths Int @default(0)
+
   // Offline rewards system
   lastHeartbeat          DateTime @default(now()) @map("last_heartbeat")
   lastExpPerSecond       Float    @default(0) @map("last_exp_per_second")
@@ -65,6 +68,22 @@ model PlayerCharacter {
   jewelOfBless           Int      @default(0) @map("jewel_of_bless")
   jewelOfSoul            Int      @default(0) @map("jewel_of_soul")
   jewelOfLife            Int      @default(0) @map("jewel_of_life")
+  jewelOfChaos           Int      @default(0) @map("jewel_of_chaos")
+
+  // Special materials (currency-like items)
+  scrollOfArchangel      Int      @default(0) @map("scroll_of_archangel")
+  bloodBone              Int      @default(0) @map("blood_bone")
+  devilsKey              Int      @default(0) @map("devils_key")
+  devilsEye              Int      @default(0) @map("devils_eye")
+
+  // Event tickets
+  bloodCastleTicket      Int      @default(0) @map("blood_castle_ticket")
+  devilSquareTicket      Int      @default(0) @map("devil_square_ticket")
+
+  // Daily event entries (reset daily)
+  bloodCastleEntriesToday Int      @default(0) @map("blood_castle_entries_today")
+  devilSquareEntriesToday Int      @default(0) @map("devil_square_entries_today")
+  lastEventResetDate      DateTime? @map("last_event_reset_date")
 
   // Relations
   user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)

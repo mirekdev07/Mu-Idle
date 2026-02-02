@@ -8,10 +8,9 @@ import { useGameStore } from '@/store/gameStore';
 import HuntingPanel from '@/components/game/HuntingPanel';
 import EquipmentPanel from '@/components/game/EquipmentPanel';
 import InventorySlot from '@/components/game/InventorySlot';
-import ItemTooltip from '@/components/game/ItemTooltip';
 import CraftingPanel from '@/components/game/CraftingPanel';
 import { Item, EquipmentSlotKey } from '@/types/game';
-import { useConfirmModal } from '@/components/ui/ConfirmModal';
+import { useConfirmModal, useInfoModal } from '@/components/ui/ConfirmModal';
 import InfoTooltip from '@/components/ui/InfoTooltip';
 
 interface CharacterData {
@@ -30,9 +29,19 @@ interface CharacterData {
   currentHp: number | null;
   resetCount: number;
   monstersKilled: number;
+  deaths: number;
   jewelOfBless: number;
   jewelOfSoul: number;
   jewelOfLife: number;
+  jewelOfChaos: number;
+  scrollOfArchangel: number;
+  bloodBone: number;
+  devilsKey: number;
+  devilsEye: number;
+  bloodCastleTicket: number;
+  devilSquareTicket: number;
+  bloodCastleEntriesToday: number;
+  devilSquareEntriesToday: number;
 }
 
 interface GameStats {
@@ -56,8 +65,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentHp, setCurrentHp] = useState(0);
-  const [hoveredItem, setHoveredItem] = useState<Item | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const [expPerSecond, setExpPerSecond] = useState(0);
   const [zenPerSecond, setZenPerSecond] = useState(0);
   const [lastExpUpdate, setLastExpUpdate] = useState<{ exp: bigint; zen: bigint; time: number } | null>(null);
@@ -75,14 +82,16 @@ export default function HomePage() {
     clearInventory,
   } = useGameStore();
 
-  // Track monsters killed locally for live updates
+  // Track monsters killed and deaths locally for live updates
   const [localMonstersKilled, setLocalMonstersKilled] = useState(0);
+  const [localDeaths, setLocalDeaths] = useState(0);
 
   // Mobile tab state
   const [activeTab, setActiveTab] = useState<'hunt' | 'character' | 'inventory'>('hunt');
 
   // Confirm modal
   const { showConfirm, ConfirmModal } = useConfirmModal();
+  const { showInfo, InfoModal } = useInfoModal();
 
 
   const loadGameData = useCallback(async () => {
@@ -94,6 +103,7 @@ export default function HomePage() {
         setGameData(data);
         setCurrentHp(data.character.currentHp ?? data.stats.maxHp);
         setLocalMonstersKilled(data.character.monstersKilled || 0);
+        setLocalDeaths(data.character.deaths || 0);
         // Load inventory and equipment
         await loadAllData(data.character.id);
         // Show offline rewards modal if any
@@ -140,6 +150,7 @@ export default function HomePage() {
             level: gameData.character.level,
             levelup_points: gameData.character.levelupPoints,
             monsters_killed: localMonstersKilled,
+            deaths: localDeaths,
             exp_per_second: expPerSecond,
             zen_per_second: zenPerSecond,
             update_heartbeat: updateHeartbeat,
@@ -163,7 +174,7 @@ export default function HomePage() {
       clearInterval(saveInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [gameData, localMonstersKilled, expPerSecond, zenPerSecond]);
+  }, [gameData, localMonstersKilled, localDeaths, expPerSecond, zenPerSecond]);
 
   const handleHpChange = async (newHp: number) => {
     setCurrentHp(newHp);
@@ -227,8 +238,9 @@ export default function HomePage() {
     };
 
     // Calculate new maxHp for new level (same formula as stats.service.ts)
+    // HP = 100 + (vitality * 5) + (level * 3)
     const newMaxHp = leveledUp
-      ? Math.floor(100 + gameData.character.vitality * 7.5 + newLevel * 10)
+      ? Math.floor(100 + gameData.character.vitality * 5 + newLevel * 3)
       : gameData.stats.maxHp;
 
     const newStats = leveledUp
@@ -287,7 +299,7 @@ export default function HomePage() {
   };
 
   const handleDeath = () => {
-    // Could implement death penalty here
+    setLocalDeaths((prev) => prev + 1);
   };
 
   // Refresh stats after equipment changes
@@ -360,7 +372,7 @@ export default function HomePage() {
     setLocalMonstersKilled((prev) => prev + 1);
   };
 
-  const handleJewelDrop = async (type: 'bless' | 'soul' | 'life') => {
+  const handleJewelDrop = async (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye') => {
     if (!gameData) return;
 
     try {
@@ -382,6 +394,11 @@ export default function HomePage() {
             jewelOfBless: data.jewels.bless,
             jewelOfSoul: data.jewels.soul,
             jewelOfLife: data.jewels.life,
+            jewelOfChaos: data.jewels.chaos,
+            scrollOfArchangel: data.materials?.archangel ?? gameData.character.scrollOfArchangel,
+            bloodBone: data.materials?.bloodbone ?? gameData.character.bloodBone,
+            devilsKey: data.materials?.devilskey ?? gameData.character.devilsKey,
+            devilsEye: data.materials?.devilseye ?? gameData.character.devilsEye,
           },
         });
       }
@@ -431,9 +448,55 @@ export default function HomePage() {
     }
   };
 
-  const handleItemHover = (item: Item | null, position: { x: number; y: number } | null) => {
-    setHoveredItem(item);
-    setTooltipPos(position);
+  const handleRebuild = async () => {
+    if (!gameData) return;
+
+    const confirmed = await showConfirm({
+      title: 'Rebuild Stats',
+      message: 'Reset all stats to 25 and get back all spent points? Cost: 1,000,000 Zen',
+      confirmText: 'Rebuild',
+      cancelText: 'Cancel',
+      confirmColor: 'yellow',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch('/api/character/rebuild', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: gameData.character.id,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Reload all game data to get fresh stats
+        await loadGameData();
+        await showInfo({
+          title: 'Rebuild Complete!',
+          message: `Your stats have been reset to 25. You received ${data.pointsReturned} stat points to redistribute.`,
+          buttonText: 'Great!',
+          color: 'yellow',
+        });
+      } else {
+        await showInfo({
+          title: 'Rebuild Failed',
+          message: data.message || 'Something went wrong',
+          buttonText: 'OK',
+          color: 'red',
+        });
+      }
+    } catch (err) {
+      console.error('Rebuild failed:', err);
+      await showInfo({
+        title: 'Error',
+        message: 'Failed to rebuild stats. Please try again.',
+        buttonText: 'OK',
+        color: 'red',
+      });
+    }
   };
 
   const handleCraftItem = (item: Item, slotIndex: number) => {
@@ -581,9 +644,21 @@ export default function HomePage() {
               <span className="hidden sm:inline text-gray-400 text-sm">| {character.name}</span>
             </div>
             <div className="flex items-center gap-2">
+              <Link href="/events" className="p-2 lg:px-3 lg:py-1 bg-orange-700 rounded hover:bg-orange-600 text-xs lg:text-sm">
+                <span className="hidden sm:inline">Events</span>
+                <span className="sm:hidden">🏰</span>
+              </Link>
+              <Link href="/chaos-machine" className="p-2 lg:px-3 lg:py-1 bg-purple-700 rounded hover:bg-purple-600 text-xs lg:text-sm">
+                <span className="hidden sm:inline">Chaos Machine</span>
+                <span className="sm:hidden">🔮</span>
+              </Link>
               <Link href="/characters" className="p-2 lg:px-3 lg:py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs lg:text-sm">
                 <span className="hidden sm:inline">Characters</span>
                 <span className="sm:hidden">👤</span>
+              </Link>
+              <Link href="/wiki" className="p-2 lg:px-3 lg:py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs lg:text-sm">
+                <span className="hidden sm:inline">Wiki</span>
+                <span className="sm:hidden">📖</span>
               </Link>
               <Link href="/ranking" className="p-2 lg:px-3 lg:py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs lg:text-sm">
                 <span className="hidden sm:inline">Ranking</span>
@@ -674,12 +749,10 @@ export default function HomePage() {
                 <span className="text-gray-400">Level:</span>
                 <span className="text-yellow-400">{character.level}</span>
               </div>
-              {character.resetCount > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Resets:</span>
-                  <span className="text-purple-400">{character.resetCount}</span>
-                </div>
-              )}
+              <div className="flex justify-between">
+                <span className="text-gray-400">Reset:</span>
+                <span className={character.resetCount > 0 ? "text-purple-400" : "text-gray-600"}>{character.resetCount}</span>
+              </div>
               {/* EXP Progress */}
               <div className="space-y-1">
                 <div className="flex justify-between text-xs">
@@ -705,10 +778,14 @@ export default function HomePage() {
                 <span className="text-gray-400">Monsters Killed:</span>
                 <span className="text-orange-400">{localMonstersKilled.toLocaleString()}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Deaths:</span>
+                <span className="text-red-400">{localDeaths.toLocaleString()}</span>
+              </div>
               {/* Jewels */}
               <div className="mt-2 pt-2 border-t border-gray-700">
                 <div className="text-xs text-gray-500 mb-1">Jewels</div>
-                <div className="grid grid-cols-3 gap-1 text-xs">
+                <div className="grid grid-cols-4 gap-1 text-xs">
                   <div className="flex flex-col items-center">
                     <span className="text-purple-300">💎 {character.jewelOfBless}</span>
                     <span className="text-gray-500 text-[10px]">Bless</span>
@@ -720,6 +797,10 @@ export default function HomePage() {
                   <div className="flex flex-col items-center">
                     <span className="text-orange-400">💎 {character.jewelOfLife}</span>
                     <span className="text-gray-500 text-[10px]">Life</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-yellow-400">💎 {character.jewelOfChaos}</span>
+                    <span className="text-gray-500 text-[10px]">Chaos</span>
                   </div>
                 </div>
               </div>
@@ -736,8 +817,8 @@ export default function HomePage() {
                       <div className="space-y-1">
                         <div className="font-bold text-yellow-400 mb-1">Stat Formulas:</div>
                         <div><span className="text-red-400">Strength:</span> +1.1x min dmg, +1.6x max dmg</div>
-                        <div><span className="text-blue-400">Agility:</span> +0.5x defense, +0.3x def rate</div>
-                        <div><span className="text-green-400">Vitality:</span> +7.5x HP, +8x mana</div>
+                        <div><span className="text-blue-400">Agility:</span> +0.5x defense, +0.15x atk speed</div>
+                        <div><span className="text-green-400">Vitality:</span> +5 HP per point</div>
                       </div>
                     }
                   />
@@ -780,6 +861,13 @@ export default function HomePage() {
                   </div>
                 </div>
               ))}
+              <button
+                onClick={handleRebuild}
+                disabled={BigInt(character.zen) < 1000000n}
+                className="w-full mt-2 py-1 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-700 disabled:opacity-50 rounded text-xs font-bold"
+              >
+                Rebuild (1M Zen)
+              </button>
             </div>
 
             {/* Combat Stats */}
@@ -791,10 +879,10 @@ export default function HomePage() {
                   content={
                     <div className="space-y-1">
                       <div className="font-bold text-yellow-400 mb-1">Combat Formulas:</div>
-                      <div><span className="text-red-400">Attack:</span> Base stat + weapon dmg</div>
-                      <div><span className="text-blue-400">Defense:</span> Stat × 0.5 + armor def</div>
-                      <div><span className="text-cyan-400">Crit Rate:</span> 1% + level/40 + str/200</div>
-                      <div><span className="text-orange-400">ATK Speed:</span> Stat × 0.1 + weapon</div>
+                      <div><span className="text-red-400">Attack:</span> STR × 1.1-1.6 + weapon</div>
+                      <div><span className="text-blue-400">Defense:</span> AGI × 0.5 + armor</div>
+                      <div><span className="text-cyan-400">Crit Rate:</span> 1% + level/40 + STR/200</div>
+                      <div><span className="text-orange-400">ATK Speed:</span> AGI × 0.15 + weapon</div>
                     </div>
                   }
                 />
@@ -836,7 +924,7 @@ export default function HomePage() {
           {/* Equipment Panel - Desktop */}
           <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
             <h2 className="text-lg font-semibold text-yellow-400 mb-3">Equipment</h2>
-            <EquipmentPanel equipment={equipment} onUnequip={handleUnequipItem} onHover={handleItemHover} />
+            <EquipmentPanel equipment={equipment} onUnequip={handleUnequipItem} />
             <div className="mt-3 pt-3 border-t border-gray-700 text-xs">
               <div className="text-gray-400 mb-1 flex items-center gap-1">
                 Bonuses
@@ -871,7 +959,7 @@ export default function HomePage() {
             </div>
             <div className={`grid ${craftingItem ? 'grid-cols-8' : 'grid-cols-12'} gap-1`}>
               {inventory.map((slot) => (
-                <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} onHover={handleItemHover} />
+                <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} />
               ))}
             </div>
           </div>
@@ -893,8 +981,8 @@ export default function HomePage() {
 
         {/* Mobile Layout - Tabs */}
         <div className="lg:hidden">
-          {/* Hunt Tab */}
-          {activeTab === 'hunt' && (
+          {/* Hunt Tab - Always rendered, hidden with CSS to preserve state */}
+          <div className={activeTab === 'hunt' ? '' : 'hidden'}>
             <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
               <HuntingPanel
                 characterId={character.id}
@@ -916,7 +1004,7 @@ export default function HomePage() {
                 onMonsterKill={handleMonsterKill}
               />
             </div>
-          )}
+          </div>
 
           {/* Character Tab */}
           {activeTab === 'character' && (
@@ -927,19 +1015,29 @@ export default function HomePage() {
                   <h2 className="text-lg font-semibold text-yellow-400">{character.name}</h2>
                   <span className="text-xs text-gray-400">{character.class}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+                  <div className="bg-gray-700/50 rounded p-2">
+                    <div className="text-gray-400 text-xs">Reset</div>
+                    <div className={character.resetCount > 0 ? "text-purple-400 font-bold" : "text-gray-600 font-bold"}>{character.resetCount}</div>
+                  </div>
                   <div className="bg-gray-700/50 rounded p-2">
                     <div className="text-gray-400 text-xs">Zen</div>
                     <div className="text-green-400 font-bold">{BigInt(character.zen).toLocaleString()}</div>
                   </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-gray-700/50 rounded p-2">
                     <div className="text-gray-400 text-xs">Monsters</div>
                     <div className="text-orange-400 font-bold">{localMonstersKilled.toLocaleString()}</div>
                   </div>
+                  <div className="bg-gray-700/50 rounded p-2">
+                    <div className="text-gray-400 text-xs">Deaths</div>
+                    <div className="text-red-400 font-bold">{localDeaths.toLocaleString()}</div>
+                  </div>
                 </div>
 
                 {/* Jewels */}
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                   <div className="bg-gray-700/50 rounded p-2">
                     <div className="text-lg text-purple-300">💎</div>
                     <div className="text-purple-300 font-bold text-sm">{character.jewelOfBless}</div>
@@ -955,13 +1053,31 @@ export default function HomePage() {
                     <div className="text-orange-400 font-bold text-sm">{character.jewelOfLife}</div>
                     <div className="text-gray-500 text-xs">Life</div>
                   </div>
+                  <div className="bg-gray-700/50 rounded p-2">
+                    <div className="text-lg text-yellow-400">💎</div>
+                    <div className="text-yellow-400 font-bold text-sm">{character.jewelOfChaos}</div>
+                    <div className="text-gray-500 text-xs">Chaos</div>
+                  </div>
                 </div>
 
                 {/* Stat Points */}
                 <div className="mt-3 pt-3 border-t border-gray-700">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-semibold">Stat Points</span>
-                    <span className="text-blue-400 font-bold">{character.levelupPoints}</span>
+                    <span className="text-sm font-semibold flex items-center gap-1">
+                      Stats
+                      <InfoTooltip
+                        color="blue"
+                        content={
+                          <div className="space-y-1">
+                            <div className="font-bold text-yellow-400 mb-1">Stat Formulas:</div>
+                            <div><span className="text-red-400">Strength:</span> +1.1x min dmg, +1.6x max dmg</div>
+                            <div><span className="text-blue-400">Agility:</span> +0.5x defense, +0.15x atk speed</div>
+                            <div><span className="text-green-400">Vitality:</span> +5 HP per point</div>
+                          </div>
+                        }
+                      />
+                    </span>
+                    <span className="text-blue-400 font-bold">Points: {character.levelupPoints}</span>
                   </div>
                   {[
                     { key: 'damage', label: 'STR', value: character.damage },
@@ -982,13 +1098,67 @@ export default function HomePage() {
                       </div>
                     </div>
                   ))}
+                  <button
+                    onClick={handleRebuild}
+                    disabled={BigInt(character.zen) < 1000000n}
+                    className="w-full mt-2 py-2 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-700 disabled:opacity-50 rounded text-sm font-bold"
+                  >
+                    Rebuild (1M Zen)
+                  </button>
+                </div>
+
+                {/* Combat Stats */}
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <h3 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-1">
+                    Combat
+                    <InfoTooltip
+                      color="yellow"
+                      content={
+                        <div className="space-y-1">
+                          <div className="font-bold text-yellow-400 mb-1">Combat Formulas:</div>
+                          <div><span className="text-red-400">Attack:</span> STR × 1.1-1.6 + weapon</div>
+                          <div><span className="text-blue-400">Defense:</span> AGI × 0.5 + armor</div>
+                          <div><span className="text-cyan-400">Crit Rate:</span> 1% + level/40 + STR/200</div>
+                          <div><span className="text-orange-400">ATK Speed:</span> AGI × 0.15 + weapon</div>
+                        </div>
+                      }
+                    />
+                  </h3>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-gray-700/50 rounded p-2">
+                      <span className="text-gray-500">Attack:</span>
+                      <span className="ml-1 text-red-400 font-bold">{totalStats.minDamage}-{totalStats.maxDamage}</span>
+                    </div>
+                    <div className="bg-gray-700/50 rounded p-2">
+                      <span className="text-gray-500">Defense:</span>
+                      <span className="ml-1 text-blue-400 font-bold">{totalStats.defense}</span>
+                    </div>
+                    <div className="bg-gray-700/50 rounded p-2">
+                      <span className="text-gray-500">HP:</span>
+                      <span className="ml-1 text-red-400 font-bold">{stats.maxHp}</span>
+                    </div>
+                    <div className="bg-gray-700/50 rounded p-2">
+                      <span className="text-gray-500">Crit:</span>
+                      <span className="ml-1 text-cyan-400 font-bold">{stats.criticalRate}%</span>
+                    </div>
+                    <div className="bg-gray-700/50 rounded p-2 col-span-2">
+                      <span className="text-gray-500">ATK Speed:</span>
+                      <span className="ml-1 text-orange-400 font-bold">{totalStats.attackSpeed}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* Inventory Tab */}
+          {activeTab === 'inventory' && (
+            <div className="space-y-3">
               {/* Equipment Panel */}
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <h2 className="text-lg font-semibold text-yellow-400 mb-3">Equipment</h2>
-                <EquipmentPanel equipment={equipment} onUnequip={handleUnequipItem} onHover={handleItemHover} />
+                <EquipmentPanel equipment={equipment} onUnequip={handleUnequipItem} />
                 <div className="mt-3 pt-3 border-t border-gray-700 text-xs grid grid-cols-2 gap-1">
                   {equipmentBonuses.damage_min > 0 && <div className="text-red-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} DMG</div>}
                   {equipmentBonuses.defense > 0 && <div className="text-blue-400">+{equipmentBonuses.defense} DEF</div>}
@@ -998,12 +1168,8 @@ export default function HomePage() {
                   {equipmentBonuses.max_hp > 0 && <div className="text-red-400">+{equipmentBonuses.max_hp}% HP</div>}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Inventory Tab */}
-          {activeTab === 'inventory' && (
-            <div className="space-y-3">
+              {/* Inventory */}
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <div className="flex justify-between items-center mb-3">
                   <h2 className="text-lg font-semibold text-yellow-400">Inventory</h2>
@@ -1011,7 +1177,7 @@ export default function HomePage() {
                 </div>
                 <div className="grid grid-cols-6 gap-1">
                   {inventory.map((slot) => (
-                    <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} onHover={handleItemHover} />
+                    <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} />
                   ))}
                 </div>
               </div>
@@ -1032,13 +1198,11 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Item Tooltip */}
-      {hoveredItem && tooltipPos && (
-        <ItemTooltip item={hoveredItem} position={tooltipPos} />
-      )}
-
       {/* Confirm Modal */}
       {ConfirmModal}
+
+      {/* Info Modal */}
+      {InfoModal}
 
       {/* Offline Rewards Modal */}
       {offlineRewards && (

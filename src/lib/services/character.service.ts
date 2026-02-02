@@ -134,35 +134,24 @@ export async function resetCharacter(
     return { success: false, message: 'Character must be level 400+ to reset' };
   }
 
-  // Calculate bonus points from reset (e.g., 100 points per reset)
-  const bonusPoints = 100;
+  // Bonus points from reset - 500 free stat points
+  const bonusPoints = 500;
 
-  await prisma.$transaction([
-    // Reset character stats
-    prisma.playerCharacter.update({
-      where: { id: characterId },
-      data: {
-        level: 1,
-        experience: 0n,
-        damage: 25,
-        defense: 25,
-        vitality: 25,
-        blockStat: 25,
-        attackSpeedStat: 25,
-        levelupPoints: bonusPoints,
-        resetCount: { increment: 1 },
-        currentHp: null,
-      },
-    }),
-    // Clear inventory
-    prisma.playerInventory.deleteMany({
-      where: { characterId },
-    }),
-    // Clear equipment
-    prisma.characterEquipment.deleteMany({
-      where: { characterId },
-    }),
-  ]);
+  await prisma.playerCharacter.update({
+    where: { id: characterId },
+    data: {
+      level: 1,
+      experience: 0n,
+      damage: 25,
+      defense: 25,
+      vitality: 25,
+      blockStat: 25,
+      attackSpeedStat: 25,
+      levelupPoints: bonusPoints,
+      resetCount: { increment: 1 },
+      currentHp: null,
+    },
+  });
 
   return { success: true };
 }

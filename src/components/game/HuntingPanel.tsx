@@ -19,7 +19,7 @@ interface HuntingPanelProps {
   onHpChange: (newHp: number) => void;
   onExpGain: (exp: bigint, zen: bigint) => void;
   onItemDrop: (monsterLevel: number) => void;
-  onJewelDrop: (type: 'bless' | 'soul' | 'life') => void;
+  onJewelDrop: (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye') => void;
   onDeath: () => void;
   onMonsterKill: () => void;
 }
@@ -195,7 +195,7 @@ export default function HuntingPanel({
 
     // Check if monster died
     if (newMonsterHp <= 0) {
-      const expGain = currentMonster.exp;
+      const expGain = Math.floor(currentMonster.exp * 1.2); // +20% EXP bonus
       const zenGain = currentMonster.zen;
 
       addLog(`${currentMonster.name} defeated! +${expGain} EXP, +${zenGain} Zen`, 'exp');
@@ -210,8 +210,8 @@ export default function HuntingPanel({
         addLog(`+${healAmount} HP recovered!`, 'heal');
       }
 
-      // Check for item drop (9.375% chance - increased by 25% from 7.5%)
-      if (Math.random() < 0.09375) {
+      // Check for item drop (7% chance)
+      if (Math.random() < 0.025) {
         onItemDrop(currentMonster.level);
         addLog('An item dropped!', 'item');
       }
@@ -229,6 +229,28 @@ export default function HuntingPanel({
         if (Math.random() < 0.01) {
           onJewelDrop('life');
           addLog('💎 Jewel of Life dropped!', 'item');
+        }
+        // Jewel of Chaos - rare drop (0.5%)
+        if (Math.random() < 0.005) {
+          onJewelDrop('chaos');
+          addLog('💎 Jewel of Chaos dropped!', 'item');
+        }
+        // Special materials - rare drops (0.5% each)
+        if (Math.random() < 0.005) {
+          onJewelDrop('archangel');
+          addLog('📜 Scroll of Archangel dropped!', 'item');
+        }
+        if (Math.random() < 0.005) {
+          onJewelDrop('bloodbone');
+          addLog('🦴 Blood Bone dropped!', 'item');
+        }
+        if (Math.random() < 0.005) {
+          onJewelDrop('devilskey');
+          addLog('🗝️ Devil\'s Key dropped!', 'item');
+        }
+        if (Math.random() < 0.005) {
+          onJewelDrop('devilseye');
+          addLog('👁️ Devil\'s Eye dropped!', 'item');
         }
       }
 
@@ -374,9 +396,9 @@ export default function HuntingPanel({
             <span>Your HP</span>
             <span className="text-red-400">{Math.max(0, currentHp)} / {maxHp}</span>
           </div>
-          <div className="w-full bg-gray-700 rounded-full h-4">
+          <div className="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
             <div
-              className="bg-red-500 h-4 rounded-full transition-all duration-300"
+              className="bg-red-500 h-4 rounded-full transition-[width] duration-500 ease-out"
               style={{ width: `${hpPercent}%` }}
             />
           </div>
@@ -426,9 +448,9 @@ export default function HuntingPanel({
                   <span>HP</span>
                   <span>{currentMonster.currentHp} / {currentMonster.maxHp}</span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-3">
+                <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                    className="bg-green-500 h-3 rounded-full transition-[width] duration-500 ease-out"
                     style={{ width: `${monsterHpPercent}%` }}
                   />
                 </div>

@@ -11,7 +11,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { character_id, jewel_type, amount = 1 } = body;
 
-    if (!jewel_type || !['bless', 'soul', 'life'].includes(jewel_type)) {
+    const validTypes = ['bless', 'soul', 'life', 'chaos', 'archangel', 'bloodbone', 'devilskey', 'devilseye'];
+    if (!jewel_type || !validTypes.includes(jewel_type)) {
       return errorResponse('Invalid jewel type');
     }
 
@@ -26,10 +27,15 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
-    const fieldMap: Record<string, 'jewelOfBless' | 'jewelOfSoul' | 'jewelOfLife'> = {
+    const fieldMap: Record<string, string> = {
       bless: 'jewelOfBless',
       soul: 'jewelOfSoul',
       life: 'jewelOfLife',
+      chaos: 'jewelOfChaos',
+      archangel: 'scrollOfArchangel',
+      bloodbone: 'bloodBone',
+      devilskey: 'devilsKey',
+      devilseye: 'devilsEye',
     };
 
     const field = fieldMap[jewel_type];
@@ -43,6 +49,11 @@ export async function POST(request: NextRequest) {
         jewelOfBless: true,
         jewelOfSoul: true,
         jewelOfLife: true,
+        jewelOfChaos: true,
+        scrollOfArchangel: true,
+        bloodBone: true,
+        devilsKey: true,
+        devilsEye: true,
       },
     });
 
@@ -52,6 +63,13 @@ export async function POST(request: NextRequest) {
         bless: updated.jewelOfBless,
         soul: updated.jewelOfSoul,
         life: updated.jewelOfLife,
+        chaos: updated.jewelOfChaos,
+      },
+      materials: {
+        archangel: updated.scrollOfArchangel,
+        bloodbone: updated.bloodBone,
+        devilskey: updated.devilsKey,
+        devilseye: updated.devilsEye,
       },
     });
   } catch (error) {

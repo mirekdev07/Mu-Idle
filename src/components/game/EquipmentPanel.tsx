@@ -1,11 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { Equipment, EquipmentSlotKey, Item } from '@/types/game';
+import ItemModal from './ItemModal';
 
 interface EquipmentPanelProps {
   equipment: Equipment;
   onUnequip: (slot: EquipmentSlotKey) => void;
-  onHover?: (item: Item | null, position: { x: number; y: number } | null) => void;
 }
 
 const SLOT_CONFIG: { key: EquipmentSlotKey; label: string; emoji: string }[] = [
@@ -16,6 +17,8 @@ const SLOT_CONFIG: { key: EquipmentSlotKey; label: string; emoji: string }[] = [
   { key: 'gloves', label: 'Gloves', emoji: '🧤' },
   { key: 'pants', label: 'Pants', emoji: '👖' },
   { key: 'boots', label: 'Boots', emoji: '🥾' },
+  { key: 'ring', label: 'Ring', emoji: '💍' },
+  { key: 'pendant', label: 'Pendant', emoji: '📿' },
 ];
 
 const RARITY_BORDERS: Record<string, string> = {
@@ -26,51 +29,72 @@ const RARITY_BORDERS: Record<string, string> = {
   legendary: 'border-yellow-500',
 };
 
-export default function EquipmentPanel({ equipment, onUnequip, onHover }: EquipmentPanelProps) {
-  const handleMouseEnter = (item: Item | undefined, e: React.MouseEvent) => {
-    if (item && onHover) {
-      onHover(item, { x: e.clientX, y: e.clientY });
+export default function EquipmentPanel({ equipment, onUnequip }: EquipmentPanelProps) {
+  const [selectedSlot, setSelectedSlot] = useState<EquipmentSlotKey | null>(null);
+
+  const handleSlotClick = (key: EquipmentSlotKey) => {
+    const item = equipment[key];
+    if (item) {
+      setSelectedSlot(key);
     }
   };
 
-  const handleMouseLeave = () => {
-    if (onHover) {
-      onHover(null, null);
+  const handleUnequip = () => {
+    if (selectedSlot) {
+      onUnequip(selectedSlot);
+      setSelectedSlot(null);
     }
   };
+
+  const handleCloseModal = () => {
+    setSelectedSlot(null);
+  };
+
+  const selectedItem = selectedSlot ? equipment[selectedSlot] : null;
 
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {SLOT_CONFIG.map(({ key, label, emoji }) => {
-        const item = equipment[key];
-        const borderClass = item ? RARITY_BORDERS[item.rarity || 'common'] : 'border-gray-700';
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        {SLOT_CONFIG.map(({ key, label, emoji }) => {
+          const item = equipment[key];
+          const borderClass = item ? RARITY_BORDERS[item.rarity || 'common'] : 'border-gray-700';
 
-        return (
-          <div
-            key={key}
-            className={`relative bg-gray-800 border-2 ${borderClass} rounded p-2 cursor-pointer hover:bg-gray-700 transition-colors`}
-            onMouseEnter={(e) => handleMouseEnter(item, e)}
-            onMouseLeave={handleMouseLeave}
-            onClick={() => item && onUnequip(key)}
-          >
-            <div className="text-center">
-              <span className="text-2xl">{item ? item.emoji : emoji}</span>
-              <div className="text-xs text-gray-400 mt-1">
-                {item ? (
-                  <span className="text-white">
-                    {item.name}
-                    {(item.enhancementLevel ?? 0) > 0 && (
-                      <span className="text-yellow-400"> +{item.enhancementLevel}</span>
-                    )}
-                  </span>
-                ) : (
-                  label
-                )}
+          return (
+            <div
+              key={key}
+              className={`relative bg-gray-800 border-2 ${borderClass} rounded p-2 cursor-pointer hover:bg-gray-700 transition-colors`}
+              onClick={() => handleSlotClick(key)}
+            >
+              <div className="text-center">
+                <span className="text-2xl">{item ? item.emoji : emoji}</span>
+                <div className="text-xs text-gray-400 mt-1">
+                  {item ? (
+                    <span className="text-white">
+                      {item.name}
+                      {(item.enhancementLevel ?? 0) > 0 && (
+                        <span className="text-yellow-400"> +{item.enhancementLevel}</span>
+                      )}
+                    </span>
+                  ) : (
+                    label
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+
+      {/* Item Modal for equipped items */}
+      {selectedSlot && selectedItem && (
+        <ItemModal
+          item={selectedItem}
+          slotIndex={0}
+          isEquipped={true}
+          onUnequip={handleUnequip}
+          onClose={handleCloseModal}
+        />
+      )}
+    </>
   );
 }

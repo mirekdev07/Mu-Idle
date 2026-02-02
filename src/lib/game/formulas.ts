@@ -70,9 +70,10 @@ export function calculateLifeSteal(damageDealt: number, lifeStealPercent: number
   return Math.floor(damageDealt * (lifeStealPercent / 100));
 }
 
-// Calculate EXP with bonus
+// Calculate EXP with bonus (includes global 50% bonus)
 export function calculateExp(baseExp: number, expBonusPercent: number): number {
-  return Math.floor(baseExp * (1 + expBonusPercent / 100));
+  const globalBonus = 1.5; // +50% global EXP bonus
+  return Math.floor(baseExp * globalBonus * (1 + expBonusPercent / 100));
 }
 
 // Calculate Zen with bonus
@@ -89,7 +90,7 @@ export function canHitMonster(attackRate: number, monsterLevel: number): boolean
 
 // Calculate max HP
 export function calculateMaxHp(level: number, vitality: number, maxHpBonusPercent: number = 0): number {
-  const baseHp = Math.floor(100 + vitality * 7.5 + level * 10);
+  const baseHp = Math.floor(100 + vitality * 5 + level * 3);
   if (maxHpBonusPercent > 0) {
     return Math.floor(baseHp * (1 + maxHpBonusPercent / 100));
   }
