@@ -16,6 +16,9 @@ export async function POST(request: NextRequest) {
       level,
       levelup_points,
       monsters_killed,
+      exp_per_second,
+      zen_per_second,
+      update_heartbeat = true, // Set to false for beforeunload saves
     } = body;
 
     let character;
@@ -48,6 +51,19 @@ export async function POST(request: NextRequest) {
     }
     if (monsters_killed !== undefined) {
       updateData.monstersKilled = monsters_killed;
+    }
+
+    // Offline rewards: save production rates
+    if (exp_per_second !== undefined) {
+      updateData.lastExpPerSecond = exp_per_second;
+    }
+    if (zen_per_second !== undefined) {
+      updateData.lastZenPerSecond = zen_per_second;
+    }
+
+    // Only update heartbeat during active gameplay (not on beforeunload)
+    if (update_heartbeat) {
+      updateData.lastHeartbeat = new Date();
     }
 
     const updatedCharacter = await prisma.playerCharacter.update({

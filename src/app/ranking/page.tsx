@@ -126,14 +126,9 @@ export default function RankingPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div>
-                      <div className="text-white font-medium">
-                        {entry.characterName}
-                      </div>
-                      <div className="text-gray-500 text-xs">
-                        {entry.username}
-                      </div>
-                    </div>
+                    <span className="text-white font-medium">
+                      {entry.characterName}
+                    </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-gray-400">
                     {entry.classType}

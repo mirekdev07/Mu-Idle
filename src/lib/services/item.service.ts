@@ -71,9 +71,9 @@ function generateRandomOption(category: number | null, rarity: ItemRarity): Item
 export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedItem | null> {
   // Drop rate is handled by caller - this always returns an item if one exists
 
-  // Get random item within level range
-  const minLevel = Math.max(1, monsterLevel - 4);
-  const maxLevel = monsterLevel + 4;
+  // Get random item within level range (±15 to cover gaps in item levels)
+  const minLevel = Math.max(1, monsterLevel - 15);
+  const maxLevel = monsterLevel + 15;
 
   const items = await prisma.item.findMany({
     where: {
@@ -106,9 +106,12 @@ export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedIt
 
   // Apply enhancement bonuses (+4 per level)
   const bonus = enhancement * 4;
-  const damageMin = randomItem.damageMin + bonus;
-  const damageMax = randomItem.damageMax + bonus;
-  const defense = randomItem.defenseValue + bonus;
+  const isWeapon = randomItem.category >= 0 && randomItem.category <= 5;
+
+  // Weapons get damage bonus, Armor gets defense bonus (never both)
+  const damageMin = isWeapon ? randomItem.damageMin + bonus : 0;
+  const damageMax = isWeapon ? randomItem.damageMax + bonus : 0;
+  const defense = isWeapon ? 0 : randomItem.defenseValue + bonus;
   // Store base name only - enhancement is displayed separately via enhancementLevel
   const name = randomItem.name.replace(/\s*\+\d+$/, '');
 
@@ -132,7 +135,7 @@ export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedIt
     level: randomItem.level,
     damageMin,
     damageMax,
-    attackSpeed: randomItem.attackSpeed,
+    attackSpeed: isWeapon ? randomItem.attackSpeed : 0,
     defense,
     category: randomItem.category,
     emoji: randomItem.emoji ?? getItemEmoji(randomItem.category),

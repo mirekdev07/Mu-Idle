@@ -138,8 +138,8 @@ export function calculateStats(
   // Attack Rate: (level * 3) + (damage * 0.5)
   const attackRate = Math.floor(character.level * 3 + character.damage * 0.5);
 
-  // Attack Speed: attack_speed_stat * 0.1 + equipment bonus
-  let attackSpeed = Math.floor(character.attackSpeedStat * 0.1) + bonuses.attack_speed;
+  // Attack Speed: attack_speed_stat * 0.1 + agility * 0.15 + equipment bonus
+  let attackSpeed = Math.floor(character.attackSpeedStat * 0.1 + character.defense * 0.15) + bonuses.attack_speed;
   if (bonuses.attack_speed_percent > 0) {
     attackSpeed = Math.floor(attackSpeed * (1 + bonuses.attack_speed_percent / 100));
   }

@@ -32,23 +32,27 @@ export async function POST(request: NextRequest) {
     // Try to get a drop
     const droppedItem = await getRandomItemDrop(monsterLevel);
 
+    console.log('Item drop attempt:', { monsterLevel, droppedItem: droppedItem ? droppedItem.name : null });
+
     if (!droppedItem) {
       return NextResponse.json({
         success: true,
         dropped: false,
-        message: 'No drop',
+        message: 'No drop - no items found for level ' + monsterLevel,
       });
     }
 
     // Add to inventory
     const result = await addItemToInventory(character.id, droppedItem);
 
+    console.log('Add to inventory result:', result);
+
     if (!result.success) {
       return NextResponse.json({
         success: true,
         dropped: true,
         added: false,
-        message: result.message,
+        message: result.message || 'Failed to add to inventory',
         item: droppedItem,
       });
     }

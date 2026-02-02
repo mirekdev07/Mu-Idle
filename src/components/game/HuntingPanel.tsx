@@ -14,9 +14,12 @@ interface HuntingPanelProps {
   currentHp: number;
   criticalRate: number;
   attackSpeed: number;
+  lifeSteal?: number;
+  reflectDamage?: number;
   onHpChange: (newHp: number) => void;
   onExpGain: (exp: bigint, zen: bigint) => void;
-  onItemDrop: () => void;
+  onItemDrop: (monsterLevel: number) => void;
+  onJewelDrop: (type: 'bless' | 'soul' | 'life') => void;
   onDeath: () => void;
   onMonsterKill: () => void;
 }
@@ -30,12 +33,13 @@ interface CombatLog {
 interface ActiveMonster extends Monster {
   currentHp: number;
   maxHp: number;
+  emoji?: string;
 }
 
 interface FloatingDamage {
   id: number;
   damage: number;
-  type: 'normal' | 'critical' | 'excellent';
+  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect';
   x: number;
   y: number;
 }
@@ -57,9 +61,12 @@ export default function HuntingPanel({
   currentHp,
   criticalRate,
   attackSpeed,
+  lifeSteal = 0,
+  reflectDamage = 0,
   onHpChange,
   onExpGain,
   onItemDrop,
+  onJewelDrop,
   onDeath,
   onMonsterKill,
 }: HuntingPanelProps) {
@@ -75,6 +82,7 @@ export default function HuntingPanel({
   const damageIdRef = useRef(0);
   const combatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const wasHuntingBeforeDeathRef = useRef(false);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
   const location = LOCATIONS[selectedLocation];
   const isDead = currentHp <= 0;
@@ -82,12 +90,12 @@ export default function HuntingPanel({
   const addLog = useCallback((message: string, type: CombatLog['type']) => {
     logIdRef.current += 1;
     setCombatLog((prev) => [
+      ...prev.slice(-49),
       { id: logIdRef.current, message, type },
-      ...prev.slice(0, 49),
     ]);
   }, []);
 
-  const addFloatingDamage = useCallback((damage: number, type: 'normal' | 'critical' | 'excellent') => {
+  const addFloatingDamage = useCallback((damage: number, type: FloatingDamage['type']) => {
     damageIdRef.current += 1;
     const x = 40 + Math.random() * 20;
     const y = 30 + Math.random() * 10;
@@ -194,10 +202,34 @@ export default function HuntingPanel({
       setMonstersKilled((prev) => prev + 1);
       onMonsterKill();
 
-      // Check for item drop (10% chance)
-      if (Math.random() < 0.1) {
-        onItemDrop();
+      // Heal 5% HP on kill
+      const healAmount = Math.floor(maxHp * 0.05);
+      const newHp = Math.min(maxHp, currentHp + healAmount);
+      if (newHp > currentHp) {
+        onHpChange(newHp);
+        addLog(`+${healAmount} HP recovered!`, 'heal');
+      }
+
+      // Check for item drop (9.375% chance - increased by 25% from 7.5%)
+      if (Math.random() < 0.09375) {
+        onItemDrop(currentMonster.level);
         addLog('An item dropped!', 'item');
+      }
+
+      // Check for jewel drops (1% each type, only from monsters level 41+)
+      if (currentMonster.level >= 41) {
+        if (Math.random() < 0.01) {
+          onJewelDrop('bless');
+          addLog('💎 Jewel of Bless dropped!', 'item');
+        }
+        if (Math.random() < 0.01) {
+          onJewelDrop('soul');
+          addLog('💎 Jewel of Soul dropped!', 'item');
+        }
+        if (Math.random() < 0.01) {
+          onJewelDrop('life');
+          addLog('💎 Jewel of Life dropped!', 'item');
+        }
       }
 
       onExpGain(BigInt(expGain), BigInt(zenGain));
@@ -209,23 +241,52 @@ export default function HuntingPanel({
       return;
     }
 
+    // Life steal: heal from damage dealt
+    if (lifeSteal > 0) {
+      const healFromSteal = Math.floor(playerDamage * lifeSteal / 100);
+      if (healFromSteal > 0) {
+        const newHpAfterSteal = Math.min(maxHp, currentHp + healFromSteal);
+        if (newHpAfterSteal > currentHp) {
+          onHpChange(newHpAfterSteal);
+        }
+      }
+    }
+
     setCurrentMonster({ ...currentMonster, currentHp: newMonsterHp });
 
     // Monster attacks player
     const monsterDamage = Math.max(1, Math.floor(
       Math.random() * (currentMonster.maxDamage - currentMonster.minDamage + 1) + currentMonster.minDamage
     ) - Math.floor(defense / 4));
-    const newPlayerHp = currentHp - monsterDamage;
 
+    // Show monster damage as floating red number
+    addFloatingDamage(monsterDamage, 'monster');
     addLog(`${currentMonster.name} deals ${monsterDamage} damage to you.`, 'damage');
-    onHpChange(Math.max(0, newPlayerHp));
+
+    let finalPlayerHp = currentHp - monsterDamage;
+
+    // Reflect damage: return some damage to monster
+    if (reflectDamage > 0) {
+      const reflectedAmount = Math.floor(monsterDamage * reflectDamage / 100);
+      if (reflectedAmount > 0) {
+        const monsterHpAfterReflect = newMonsterHp - reflectedAmount;
+        setCurrentMonster((prev) => prev ? { ...prev, currentHp: Math.max(0, monsterHpAfterReflect) } : null);
+        addFloatingDamage(reflectedAmount, 'reflect');
+        addLog(`Reflected ${reflectedAmount} damage back!`, 'damage');
+      }
+    }
+
+    onHpChange(Math.max(0, finalPlayerHp));
   }, [
     currentMonster,
     currentHp,
+    maxHp,
     minDamage,
     maxDamage,
     defense,
     criticalRate,
+    lifeSteal,
+    reflectDamage,
     addLog,
     addFloatingDamage,
     onExpGain,
@@ -234,6 +295,13 @@ export default function HuntingPanel({
     onMonsterKill,
     spawnMonster,
   ]);
+
+  // Auto-scroll combat log to bottom
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [combatLog]);
 
   // Combat loop
   useEffect(() => {
@@ -333,6 +401,8 @@ export default function HuntingPanel({
                   className={`absolute text-xl font-bold pointer-events-none animate-float-up ${
                     fd.type === 'excellent' ? 'text-green-400' :
                     fd.type === 'critical' ? 'text-cyan-400' :
+                    fd.type === 'monster' ? 'text-red-500' :
+                    fd.type === 'reflect' ? 'text-purple-400' :
                     'text-yellow-400'
                   }`}
                   style={{
@@ -341,13 +411,14 @@ export default function HuntingPanel({
                     transform: 'translate(-50%, -50%)',
                   }}
                 >
-                  {fd.damage}
+                  {fd.type === 'monster' ? `-${fd.damage}` : fd.damage}
                   {fd.type === 'excellent' && <span className="text-xs ml-1">EXC!</span>}
                   {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
+                  {fd.type === 'reflect' && <span className="text-xs ml-1">REFLECT!</span>}
                 </div>
               ))}
 
-              <div className="text-4xl mb-2">👹</div>
+              <div className="text-4xl mb-2">{currentMonster.emoji || '👹'}</div>
               <div className="text-lg font-bold">{currentMonster.name}</div>
               <div className="text-sm text-gray-400">Level {currentMonster.level}</div>
               <div className="mt-2 max-w-xs mx-auto">
@@ -397,7 +468,7 @@ export default function HuntingPanel({
       </div>
 
       {/* Combat Log */}
-      <div className="bg-gray-900 rounded-lg p-3 h-32 overflow-y-auto">
+      <div ref={logContainerRef} className="bg-gray-900 rounded-lg p-3 h-32 overflow-y-auto">
         <div className="text-xs space-y-1">
           {combatLog.map((log) => (
             <div

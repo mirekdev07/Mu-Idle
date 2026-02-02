@@ -4,6 +4,12 @@ import { getCharacterById, getLatestCharacter } from '@/lib/services/character.s
 import { getInventory } from '@/lib/services/inventory.service';
 import { getEquipment, getEquipmentBonuses } from '@/lib/services/equipment.service';
 import { calculateStats } from '@/lib/services/stats.service';
+import prisma from '@/lib/prisma';
+
+// Offline rewards constants
+const OFFLINE_RATE = 0.20; // 20% of normal production
+const MAX_OFFLINE_SECONDS = 28800; // 8 hours
+const MIN_OFFLINE_SECONDS = 60; // 1 minute minimum
 
 export async function GET(request: NextRequest) {
   const userId = await getCurrentUserId();
@@ -48,6 +54,45 @@ export async function GET(request: NextRequest) {
       bonuses
     );
 
+    // Calculate offline rewards
+    let offlineRewards = null;
+    const now = new Date();
+    const lastHeartbeat = character.lastHeartbeat;
+    const secondsElapsed = Math.floor(
+      Math.abs(now.getTime() - lastHeartbeat.getTime()) / 1000
+    );
+
+    const expPerSecond = character.lastExpPerSecond || 0;
+    const zenPerSecond = character.lastZenPerSecond || 0;
+
+    if (secondsElapsed > MIN_OFFLINE_SECONDS && (expPerSecond > 0 || zenPerSecond > 0)) {
+      const offlineSeconds = Math.min(secondsElapsed, MAX_OFFLINE_SECONDS);
+      const offlineExp = Math.floor(expPerSecond * offlineSeconds * OFFLINE_RATE);
+      const offlineZen = Math.floor(zenPerSecond * offlineSeconds * OFFLINE_RATE);
+
+      if (offlineExp > 0 || offlineZen > 0) {
+        // Add rewards to character and reset heartbeat
+        await prisma.playerCharacter.update({
+          where: { id: character.id },
+          data: {
+            experience: { increment: offlineExp },
+            zen: { increment: offlineZen },
+            lastHeartbeat: now,
+          },
+        });
+
+        // Update local values for response
+        character.experience = character.experience + BigInt(offlineExp);
+        character.zen = character.zen + BigInt(offlineZen);
+
+        offlineRewards = {
+          exp: offlineExp,
+          zen: offlineZen,
+          seconds: offlineSeconds,
+        };
+      }
+    }
+
     return NextResponse.json({
       success: true,
       character: {
@@ -67,11 +112,15 @@ export async function GET(request: NextRequest) {
         resetCount: character.resetCount,
         monstersKilled: character.monstersKilled,
         totalPlaytime: character.totalPlaytime,
+        jewelOfBless: character.jewelOfBless,
+        jewelOfSoul: character.jewelOfSoul,
+        jewelOfLife: character.jewelOfLife,
       },
       inventory,
       equipment,
       bonuses,
       stats: calculatedStats,
+      offlineRewards,
     });
   } catch (error) {
     console.error('Get game data error:', error);

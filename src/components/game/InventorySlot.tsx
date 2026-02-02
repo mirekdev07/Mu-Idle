@@ -9,6 +9,7 @@ interface InventorySlotProps {
   equipment?: Equipment;
   onEquip?: (item: Item, slotIndex: number) => void;
   onDestroy?: (slotIndex: number) => void;
+  onCraft?: (item: Item, slotIndex: number) => void;
   onHover?: (item: Item | null, position: { x: number; y: number } | null) => void;
 }
 
@@ -69,6 +70,7 @@ export default function InventorySlot({
   equipment,
   onEquip,
   onDestroy,
+  onCraft,
   onHover,
 }: InventorySlotProps) {
   const [showMenu, setShowMenu] = useState(false);
@@ -100,8 +102,15 @@ export default function InventorySlot({
   };
 
   const handleDestroy = () => {
-    if (onDestroy && confirm('Destroy this item?')) {
+    if (onDestroy) {
       onDestroy(slotIndex);
+    }
+    setShowMenu(false);
+  };
+
+  const handleCraft = () => {
+    if (item && onCraft) {
+      onCraft(item, slotIndex);
     }
     setShowMenu(false);
   };
@@ -153,6 +162,14 @@ export default function InventorySlot({
           >
             Equip
           </button>
+          {onCraft && (
+            <button
+              onClick={handleCraft}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-gray-700 text-yellow-400"
+            >
+              Craft
+            </button>
+          )}
           <button
             onClick={handleDestroy}
             className="w-full px-3 py-2 text-left text-sm hover:bg-gray-700 text-red-400"

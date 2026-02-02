@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { character_id, stat_name } = body;
+    const { character_id, stat_name, amount = 1 } = body;
 
     const validStats = ['damage', 'defense', 'vitality', 'blockStat', 'attackSpeedStat'];
     if (!stat_name || !validStats.includes(stat_name)) {
@@ -89,7 +89,11 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
-    const result = await addStatPoint(character.id, stat_name as 'damage' | 'defense' | 'vitality' | 'blockStat' | 'attackSpeedStat');
+    const result = await addStatPoint(
+      character.id,
+      stat_name as 'damage' | 'defense' | 'vitality' | 'blockStat' | 'attackSpeedStat',
+      amount
+    );
 
     if (!result.success) {
       return errorResponse(result.message ?? 'Failed to add stat point');

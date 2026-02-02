@@ -56,6 +56,16 @@ model PlayerCharacter {
   // Reset system (available at level 400+)
   resetCount Int @default(0) @map("reset_count")
 
+  // Offline rewards system
+  lastHeartbeat          DateTime @default(now()) @map("last_heartbeat")
+  lastExpPerSecond       Float    @default(0) @map("last_exp_per_second")
+  lastZenPerSecond       Float    @default(0) @map("last_zen_per_second")
+
+  // Jewels (currency-like items)
+  jewelOfBless           Int      @default(0) @map("jewel_of_bless")
+  jewelOfSoul            Int      @default(0) @map("jewel_of_soul")
+  jewelOfLife            Int      @default(0) @map("jewel_of_life")
+
   // Relations
   user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   inventory  PlayerInventory[]

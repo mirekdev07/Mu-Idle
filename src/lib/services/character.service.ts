@@ -80,7 +80,8 @@ export async function updateCharacterProgress(
 
 export async function addStatPoint(
   characterId: number,
-  statName: 'damage' | 'defense' | 'vitality' | 'blockStat' | 'attackSpeedStat'
+  statName: 'damage' | 'defense' | 'vitality' | 'blockStat' | 'attackSpeedStat',
+  amount: number = 1
 ): Promise<{ success: boolean; message?: string; newValue?: number }> {
   const character = await prisma.playerCharacter.findUnique({
     where: { id: characterId },
@@ -90,15 +91,18 @@ export async function addStatPoint(
     return { success: false, message: 'Character not found' };
   }
 
-  if (character.levelupPoints < 1) {
+  // Limit amount to available points
+  const pointsToAdd = Math.min(amount, character.levelupPoints);
+
+  if (pointsToAdd < 1) {
     return { success: false, message: 'No stat points available' };
   }
 
   const updatedCharacter = await prisma.playerCharacter.update({
     where: { id: characterId },
     data: {
-      [statName]: { increment: 1 },
-      levelupPoints: { decrement: 1 },
+      [statName]: { increment: pointsToAdd },
+      levelupPoints: { decrement: pointsToAdd },
     },
   });
 

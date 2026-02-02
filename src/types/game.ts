@@ -194,6 +194,7 @@ export interface Monster {
   defense: number;
   exp: number;
   zen: number;
+  emoji?: string;
   image?: string;
 }
 
