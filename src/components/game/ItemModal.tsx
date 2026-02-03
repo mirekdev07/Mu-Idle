@@ -1,6 +1,8 @@
 'use client';
 
+import Image from 'next/image';
 import { Item, Equipment, EQUIPMENT_SLOTS } from '@/types/game';
+import { getItemImagePath } from '@/lib/game/itemImages';
 
 interface ItemModalProps {
   item: Item;
@@ -137,7 +139,17 @@ export default function ItemModal({
         {/* Header */}
         <div className={`${colors.bg} rounded-lg p-3 mb-4`}>
           <div className="flex items-center gap-3">
-            <span className="text-4xl">{item.emoji}</span>
+            {getItemImagePath(item.name) ? (
+              <Image
+                src={getItemImagePath(item.name)!}
+                alt={item.name}
+                width={56}
+                height={56}
+                className="object-contain"
+              />
+            ) : (
+              <span className="text-4xl">{item.emoji}</span>
+            )}
             <div className="flex-1">
               <div className={`font-bold text-lg ${colors.text}`}>
                 {item.name}

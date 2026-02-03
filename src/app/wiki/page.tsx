@@ -1,17 +1,99 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 
 export default function WikiPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-gray-900/95 backdrop-blur border-b border-gray-700 p-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-yellow-400">MU Idle Wiki</h1>
-          <Link href="/" className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm">
-            Back to Game
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-xl sm:text-2xl font-bold text-yellow-400 hover:text-yellow-300">
+              MU Idle
+            </Link>
+            <span className="hidden sm:inline text-gray-500">|</span>
+            <h1 className="hidden sm:block text-xl font-semibold">Wiki</h1>
+          </div>
+
+          {/* Desktop Navigation */}
+          <div className="hidden sm:flex items-center gap-2">
+            <Link href="/" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+              Game
+            </Link>
+            <Link href="/events" className="px-3 py-1 bg-orange-700 rounded hover:bg-orange-600 text-sm">
+              Events
+            </Link>
+            <Link href="/chaos-machine" className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm">
+              Chaos Machine
+            </Link>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <div className="sm:hidden relative">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              {mobileMenuOpen ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+
+            {mobileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMobileMenuOpen(false)} />
+                <div className="absolute right-0 top-12 z-50 w-56 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
+                  <div className="py-2">
+                    <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">🎮</span>
+                      <div>
+                        <div className="font-medium text-yellow-400">Game</div>
+                        <div className="text-xs text-gray-400">Back to hunting</div>
+                      </div>
+                    </Link>
+                    <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-orange-700/30">
+                      <span className="text-xl">🏰</span>
+                      <div>
+                        <div className="font-medium text-orange-400">Events</div>
+                        <div className="text-xs text-gray-400">Blood Castle & Devil Square</div>
+                      </div>
+                    </Link>
+                    <Link href="/chaos-machine" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-purple-700/30">
+                      <span className="text-xl">🔮</span>
+                      <div>
+                        <div className="font-medium text-purple-400">Chaos Machine</div>
+                        <div className="text-xs text-gray-400">Craft items & tickets</div>
+                      </div>
+                    </Link>
+                    <Link href="/characters" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">👤</span>
+                      <div>
+                        <div className="font-medium">Characters</div>
+                        <div className="text-xs text-gray-400">Manage your heroes</div>
+                      </div>
+                    </Link>
+                    <Link href="/ranking" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">🏆</span>
+                      <div>
+                        <div className="font-medium">Ranking</div>
+                        <div className="text-xs text-gray-400">Top players</div>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -138,30 +220,40 @@ export default function WikiPage() {
           <h2 className="text-xl font-bold text-yellow-400 mb-4">Items & Rarity</h2>
 
           <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-gray-900/50 rounded p-3">
-              <span className="w-24 text-gray-400 font-bold border-2 border-gray-600 rounded px-2 py-1 text-center">Common</span>
-              <span className="text-sm text-gray-300">Base stats, no special bonuses</span>
-              <span className="ml-auto text-gray-500">60%</span>
+            <div className="bg-gray-900/50 rounded p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-gray-400 font-bold">Common</span>
+                <span className="text-gray-500 text-sm">60%</span>
+              </div>
+              <p className="text-xs text-gray-400">Base stats, no special bonuses</p>
             </div>
-            <div className="flex items-center gap-3 bg-gray-900/50 rounded p-3">
-              <span className="w-24 text-green-400 font-bold border-2 border-green-600 rounded px-2 py-1 text-center">Uncommon</span>
-              <span className="text-sm text-gray-300">Slightly better stats</span>
-              <span className="ml-auto text-gray-500">25%</span>
+            <div className="bg-gray-900/50 rounded p-3 border-l-2 border-green-500">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-green-400 font-bold">Uncommon</span>
+                <span className="text-gray-500 text-sm">25%</span>
+              </div>
+              <p className="text-xs text-gray-400">Slightly better stats</p>
             </div>
-            <div className="flex items-center gap-3 bg-gray-900/50 rounded p-3">
-              <span className="w-24 text-blue-400 font-bold border-2 border-blue-600 rounded px-2 py-1 text-center">Rare</span>
-              <span className="text-sm text-gray-300">Good stats, may have 1 option</span>
-              <span className="ml-auto text-gray-500">10%</span>
+            <div className="bg-gray-900/50 rounded p-3 border-l-2 border-blue-500">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-blue-400 font-bold">Rare</span>
+                <span className="text-gray-500 text-sm">10%</span>
+              </div>
+              <p className="text-xs text-gray-400">Good stats, may have 1 option</p>
             </div>
-            <div className="flex items-center gap-3 bg-gray-900/50 rounded p-3">
-              <span className="w-24 text-purple-400 font-bold border-2 border-purple-600 rounded px-2 py-1 text-center">Epic</span>
-              <span className="text-sm text-gray-300">Great stats, 1-2 options</span>
-              <span className="ml-auto text-gray-500">4%</span>
+            <div className="bg-gray-900/50 rounded p-3 border-l-2 border-purple-500">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-purple-400 font-bold">Epic</span>
+                <span className="text-gray-500 text-sm">4%</span>
+              </div>
+              <p className="text-xs text-gray-400">Great stats, 1-2 options</p>
             </div>
-            <div className="flex items-center gap-3 bg-gray-900/50 rounded p-3">
-              <span className="w-24 text-yellow-400 font-bold border-2 border-yellow-500 rounded px-2 py-1 text-center">Legendary</span>
-              <span className="text-sm text-gray-300">Best stats, 2-3 options</span>
-              <span className="ml-auto text-gray-500">1%</span>
+            <div className="bg-gray-900/50 rounded p-3 border-l-2 border-yellow-500">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-yellow-400 font-bold">Legendary</span>
+                <span className="text-gray-500 text-sm">1%</span>
+              </div>
+              <p className="text-xs text-gray-400">Best stats, 2-3 options</p>
             </div>
           </div>
 

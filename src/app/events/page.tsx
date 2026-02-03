@@ -112,6 +112,7 @@ export default function EventsPage() {
   const [combatLog, setCombatLog] = useState<string[]>([]);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [summaryData, setSummaryData] = useState<{
     exp: number;
     zen: number;
@@ -366,7 +367,7 @@ export default function EventsPage() {
     const critRate = stats.criticalRate + (bonuses.critical_rate || 0);
     const lifeSteal = bonuses.life_steal || 0;
     const attackSpeed = stats.attackSpeed + (bonuses.attack_speed || 0);
-    const attackInterval = Math.max(500, 2000 - attackSpeed * 10); // Same as normal hunting
+    const attackInterval = Math.max(250, 2000 - attackSpeed * 10); // Same as normal hunting
 
     combatIntervalRef.current = setInterval(() => {
       setCurrentMonster(prev => {
@@ -410,9 +411,10 @@ export default function EventsPage() {
         setCurrentHp(hp => {
           const newHp = hp - monsterDamage;
           if (newHp <= 0) {
-            // Player died - respawn with full HP
-            addLog('You died! Respawning...');
-            return stats.maxHp;
+            // Player died - end event but keep rewards
+            addLog('You died! Event ended.');
+            setTimeout(() => endEvent(), 100);
+            return 0;
           }
           return newHp;
         });
@@ -426,7 +428,7 @@ export default function EventsPage() {
         clearInterval(combatIntervalRef.current);
       }
     };
-  }, [activeEvent, currentMonster, stats, bonuses, difficulty, character, spawnMonster, addFloatingDamage]);
+  }, [activeEvent, currentMonster, stats, bonuses, difficulty, character, spawnMonster, addFloatingDamage, endEvent]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -454,19 +456,87 @@ export default function EventsPage() {
       <header className="sticky top-0 z-30 bg-gray-900/95 backdrop-blur border-b border-gray-700 p-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-2xl font-bold text-yellow-400 hover:text-yellow-300">
+            <Link href="/" className="text-xl sm:text-2xl font-bold text-yellow-400 hover:text-yellow-300">
               MU Idle
             </Link>
-            <span className="text-gray-500">|</span>
-            <h1 className="text-xl font-semibold text-orange-400">Events</h1>
+            <span className="hidden sm:inline text-gray-500">|</span>
+            <h1 className="hidden sm:block text-xl font-semibold text-orange-400">Events</h1>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Desktop Navigation */}
+          <div className="hidden sm:flex items-center gap-2">
             <Link href="/" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
               Game
             </Link>
             <Link href="/chaos-machine" className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm">
               Chaos Machine
             </Link>
+            <Link href="/ranking" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+              Ranking
+            </Link>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <div className="sm:hidden relative">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              {mobileMenuOpen ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+
+            {mobileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMobileMenuOpen(false)} />
+                <div className="absolute right-0 top-12 z-50 w-56 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
+                  <div className="py-2">
+                    <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">🎮</span>
+                      <div>
+                        <div className="font-medium text-yellow-400">Game</div>
+                        <div className="text-xs text-gray-400">Back to hunting</div>
+                      </div>
+                    </Link>
+                    <Link href="/chaos-machine" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-purple-700/30">
+                      <span className="text-xl">🔮</span>
+                      <div>
+                        <div className="font-medium text-purple-400">Chaos Machine</div>
+                        <div className="text-xs text-gray-400">Craft items & tickets</div>
+                      </div>
+                    </Link>
+                    <Link href="/characters" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">👤</span>
+                      <div>
+                        <div className="font-medium">Characters</div>
+                        <div className="text-xs text-gray-400">Manage your heroes</div>
+                      </div>
+                    </Link>
+                    <Link href="/ranking" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">🏆</span>
+                      <div>
+                        <div className="font-medium">Ranking</div>
+                        <div className="text-xs text-gray-400">Top players</div>
+                      </div>
+                    </Link>
+                    <Link href="/wiki" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">📖</span>
+                      <div>
+                        <div className="font-medium">Wiki</div>
+                        <div className="text-xs text-gray-400">Game guide</div>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -537,9 +607,9 @@ export default function EventsPage() {
                 {floatingDamages.map(fd => (
                   <div
                     key={fd.id}
-                    className={`absolute pointer-events-none font-bold text-lg animate-bounce ${
-                      fd.type === 'critical' ? 'text-yellow-400 text-xl' :
-                      fd.type === 'player' ? 'text-white' : 'text-red-500'
+                    className={`absolute pointer-events-none font-bold text-xl ${
+                      fd.type === 'critical' ? 'text-cyan-400' :
+                      fd.type === 'monster' ? 'text-red-500' : 'text-yellow-400'
                     }`}
                     style={{
                       left: `${fd.x}%`,
@@ -548,7 +618,7 @@ export default function EventsPage() {
                     }}
                   >
                     {fd.type === 'monster' ? `-${fd.damage}` : fd.damage}
-                    {fd.type === 'critical' && '!'}
+                    {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
                   </div>
                 ))}
 

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Equipment, EquipmentSlotKey, Item } from '@/types/game';
 import ItemModal from './ItemModal';
+import { getItemImagePath } from '@/lib/game/itemImages';
 
 interface EquipmentPanelProps {
   equipment: Equipment;
@@ -66,7 +68,17 @@ export default function EquipmentPanel({ equipment, onUnequip }: EquipmentPanelP
               onClick={() => handleSlotClick(key)}
             >
               <div className="text-center">
-                <span className="text-2xl">{item ? item.emoji : emoji}</span>
+                {item && getItemImagePath(item.name) ? (
+                  <Image
+                    src={getItemImagePath(item.name)!}
+                    alt={item.name}
+                    width={48}
+                    height={48}
+                    className="object-contain mx-auto"
+                  />
+                ) : (
+                  <span className="text-2xl">{item ? item.emoji : emoji}</span>
+                )}
                 <div className="text-xs text-gray-400 mt-1">
                   {item ? (
                     <span className="text-white">

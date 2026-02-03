@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MU Idle Adventure</string>
+    <string name="title_activity_main">MU Idle Adventure</string>
+    <string name="package_name">com.muidle.adventure</string>
+    <string name="custom_url_scheme">com.muidle.adventure</string>
+</resources>

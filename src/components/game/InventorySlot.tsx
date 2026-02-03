@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Item, Equipment, EQUIPMENT_SLOTS } from '@/types/game';
 import ItemModal from './ItemModal';
+import { getItemImagePath } from '@/lib/game/itemImages';
 
 interface InventorySlotProps {
   item: Item | null;
@@ -183,7 +185,17 @@ export default function InventorySlot({
         onClick={handleClick}
       >
         {item ? (
-          <span className="text-2xl">{item.emoji}</span>
+          getItemImagePath(item.name) ? (
+            <Image
+              src={getItemImagePath(item.name)!}
+              alt={item.name}
+              width={44}
+              height={44}
+              className="object-contain"
+            />
+          ) : (
+            <span className="text-2xl">{item.emoji}</span>
+          )
         ) : (
           <span className="text-gray-600 text-xs">{slotIndex + 1}</span>
         )}

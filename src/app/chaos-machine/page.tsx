@@ -42,6 +42,7 @@ export default function ChaosMachinePage() {
   const [zen, setZen] = useState<bigint>(0n);
   const [mixing, setMixing] = useState(false);
   const [mixResult, setMixResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -152,22 +153,87 @@ export default function ChaosMachinePage() {
       <header className="sticky top-0 z-30 bg-gray-900/95 backdrop-blur border-b border-gray-700 p-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-2xl font-bold text-yellow-400 hover:text-yellow-300">
+            <Link href="/" className="text-xl sm:text-2xl font-bold text-yellow-400 hover:text-yellow-300">
               MU Idle
             </Link>
-            <span className="text-gray-500">|</span>
-            <h1 className="text-xl font-semibold text-purple-400">Chaos Machine</h1>
+            <span className="hidden sm:inline text-gray-500">|</span>
+            <h1 className="hidden sm:block text-xl font-semibold text-purple-400">Chaos Machine</h1>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Desktop Navigation */}
+          <div className="hidden sm:flex items-center gap-2">
             <Link href="/" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
               Game
             </Link>
-            <Link href="/characters" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
-              Characters
+            <Link href="/events" className="px-3 py-1 bg-orange-700 rounded hover:bg-orange-600 text-sm">
+              Events
             </Link>
-            <Link href="/wiki" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
-              Wiki
+            <Link href="/ranking" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+              Ranking
             </Link>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <div className="sm:hidden relative">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              {mobileMenuOpen ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+
+            {mobileMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMobileMenuOpen(false)} />
+                <div className="absolute right-0 top-12 z-50 w-56 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden">
+                  <div className="py-2">
+                    <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">🎮</span>
+                      <div>
+                        <div className="font-medium text-yellow-400">Game</div>
+                        <div className="text-xs text-gray-400">Back to hunting</div>
+                      </div>
+                    </Link>
+                    <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-orange-700/30">
+                      <span className="text-xl">🏰</span>
+                      <div>
+                        <div className="font-medium text-orange-400">Events</div>
+                        <div className="text-xs text-gray-400">Blood Castle & Devil Square</div>
+                      </div>
+                    </Link>
+                    <Link href="/characters" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">👤</span>
+                      <div>
+                        <div className="font-medium">Characters</div>
+                        <div className="text-xs text-gray-400">Manage your heroes</div>
+                      </div>
+                    </Link>
+                    <Link href="/ranking" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">🏆</span>
+                      <div>
+                        <div className="font-medium">Ranking</div>
+                        <div className="text-xs text-gray-400">Top players</div>
+                      </div>
+                    </Link>
+                    <Link href="/wiki" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
+                      <span className="text-xl">📖</span>
+                      <div>
+                        <div className="font-medium">Wiki</div>
+                        <div className="text-xs text-gray-400">Game guide</div>
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>

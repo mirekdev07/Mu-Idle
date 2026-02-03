@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -88,6 +88,12 @@ export default function HomePage() {
 
   // Mobile tab state
   const [activeTab, setActiveTab] = useState<'hunt' | 'character' | 'inventory'>('hunt');
+
+  // Mobile menu dropdown
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Crafting panel ref for mobile scroll
+  const craftingPanelRef = useRef<HTMLDivElement>(null);
 
   // Confirm modal
   const { showConfirm, ConfirmModal } = useConfirmModal();
@@ -550,6 +556,10 @@ export default function HomePage() {
 
   const handleCraftItem = (item: Item, slotIndex: number) => {
     setCraftingItem({ item, slotIndex });
+    // Scroll to crafting panel on mobile after a short delay to let it render
+    setTimeout(() => {
+      craftingPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const handleCraftAction = async (action: 'bless' | 'soul' | 'life'): Promise<{ success: boolean; message: string; newItem?: Item }> => {
@@ -692,34 +702,136 @@ export default function HomePage() {
               <h1 className="text-lg lg:text-2xl font-bold text-yellow-400">MU Idle</h1>
               <span className="hidden sm:inline text-gray-400 text-sm">| {character.name}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Link href="/events" className="p-2 lg:px-3 lg:py-1 bg-orange-700 rounded hover:bg-orange-600 text-xs lg:text-sm">
-                <span className="hidden sm:inline">Events</span>
-                <span className="sm:hidden">🏰</span>
+            {/* Desktop Navigation */}
+            <div className="hidden sm:flex items-center gap-2">
+              <Link href="/events" className="px-3 py-1 bg-orange-700 rounded hover:bg-orange-600 text-sm">
+                Events
               </Link>
-              <Link href="/chaos-machine" className="p-2 lg:px-3 lg:py-1 bg-purple-700 rounded hover:bg-purple-600 text-xs lg:text-sm">
-                <span className="hidden sm:inline">Chaos Machine</span>
-                <span className="sm:hidden">🔮</span>
+              <Link href="/chaos-machine" className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm">
+                Chaos Machine
               </Link>
-              <Link href="/characters" className="p-2 lg:px-3 lg:py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs lg:text-sm">
-                <span className="hidden sm:inline">Characters</span>
-                <span className="sm:hidden">👤</span>
+              <Link href="/characters" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+                Characters
               </Link>
-              <Link href="/wiki" className="p-2 lg:px-3 lg:py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs lg:text-sm">
-                <span className="hidden sm:inline">Wiki</span>
-                <span className="sm:hidden">📖</span>
+              <Link href="/wiki" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+                Wiki
               </Link>
-              <Link href="/ranking" className="p-2 lg:px-3 lg:py-1 bg-gray-700 rounded hover:bg-gray-600 text-xs lg:text-sm">
-                <span className="hidden sm:inline">Ranking</span>
-                <span className="sm:hidden">🏆</span>
+              <Link href="/ranking" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
+                Ranking
               </Link>
               <button
                 onClick={() => signOut({ callbackUrl: '/login' })}
-                className="p-2 lg:px-3 lg:py-1 bg-red-700 rounded hover:bg-red-600 text-xs lg:text-sm"
+                className="px-3 py-1 bg-red-700 rounded hover:bg-red-600 text-sm"
               >
-                <span className="hidden sm:inline">Logout</span>
-                <span className="sm:hidden">🚪</span>
+                Logout
               </button>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="sm:hidden relative">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                {mobileMenuOpen ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Mobile Dropdown Menu */}
+              {mobileMenuOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setMobileMenuOpen(false)}
+                  />
+                  {/* Menu */}
+                  <div className="absolute right-0 top-12 z-50 w-56 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="p-2 border-b border-gray-700">
+                      <div className="text-xs text-gray-400 px-3 py-1">Menu</div>
+                    </div>
+                    <div className="py-2">
+                      <Link
+                        href="/events"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-orange-700/30 transition-colors"
+                      >
+                        <span className="text-xl">🏰</span>
+                        <div>
+                          <div className="font-medium text-orange-400">Events</div>
+                          <div className="text-xs text-gray-400">Blood Castle & Devil Square</div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/chaos-machine"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-purple-700/30 transition-colors"
+                      >
+                        <span className="text-xl">🔮</span>
+                        <div>
+                          <div className="font-medium text-purple-400">Chaos Machine</div>
+                          <div className="text-xs text-gray-400">Craft items & tickets</div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/characters"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors"
+                      >
+                        <span className="text-xl">👤</span>
+                        <div>
+                          <div className="font-medium">Characters</div>
+                          <div className="text-xs text-gray-400">Manage your heroes</div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/wiki"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors"
+                      >
+                        <span className="text-xl">📖</span>
+                        <div>
+                          <div className="font-medium">Wiki</div>
+                          <div className="text-xs text-gray-400">Game guide & info</div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/ranking"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors"
+                      >
+                        <span className="text-xl">🏆</span>
+                        <div>
+                          <div className="font-medium">Ranking</div>
+                          <div className="text-xs text-gray-400">Top players</div>
+                        </div>
+                      </Link>
+                    </div>
+                    <div className="p-2 border-t border-gray-700">
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          signOut({ callbackUrl: '/login' });
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-3 hover:bg-red-700/30 transition-colors rounded-lg"
+                      >
+                        <span className="text-xl">🚪</span>
+                        <div>
+                          <div className="font-medium text-red-400">Logout</div>
+                          <div className="text-xs text-gray-400">Sign out of account</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -949,7 +1061,7 @@ export default function HomePage() {
                 <div><span className="text-gray-500">Defense:</span><span className="ml-1 text-blue-400">{totalStats.defense}</span></div>
                 <div><span className="text-gray-500">HP:</span><span className="ml-1 text-red-400">{stats.maxHp}</span></div>
                 <div><span className="text-gray-500">Crit:</span><span className="ml-1">{stats.criticalRate}%</span></div>
-                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-orange-400">{totalStats.attackSpeed}</span></div>
+                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-orange-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 175 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
               </div>
             </div>
           </div>
@@ -1211,6 +1323,7 @@ export default function HomePage() {
                     <div className="bg-gray-700/50 rounded p-2 col-span-2">
                       <span className="text-gray-500">ATK Speed:</span>
                       <span className="ml-1 text-orange-400 font-bold">{totalStats.attackSpeed}</span>
+                      {totalStats.attackSpeed >= 175 && <span className="text-green-400 ml-1">(max)</span>}
                     </div>
                   </div>
                 </div>
@@ -1251,14 +1364,16 @@ export default function HomePage() {
 
               {/* Crafting Panel - Mobile */}
               {craftingItem && (
-                <CraftingPanel
-                  item={craftingItem.item}
-                  jewelOfBless={character.jewelOfBless}
-                  jewelOfSoul={character.jewelOfSoul}
-                  jewelOfLife={character.jewelOfLife}
-                  onCraft={handleCraftAction}
-                  onClose={handleCloseCrafting}
-                />
+                <div ref={craftingPanelRef}>
+                  <CraftingPanel
+                    item={craftingItem.item}
+                    jewelOfBless={character.jewelOfBless}
+                    jewelOfSoul={character.jewelOfSoul}
+                    jewelOfLife={character.jewelOfLife}
+                    onCraft={handleCraftAction}
+                    onClose={handleCloseCrafting}
+                  />
+                </div>
               )}
             </div>
           )}
