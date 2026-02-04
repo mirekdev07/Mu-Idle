@@ -20,6 +20,22 @@ model User {
   lastLogin    DateTime? @map("last_login")
   isActive     Boolean   @default(true) @map("is_active")
 
+  // Jewels (shared across all characters)
+  jewelOfBless           Int      @default(0) @map("jewel_of_bless")
+  jewelOfSoul            Int      @default(0) @map("jewel_of_soul")
+  jewelOfLife            Int      @default(0) @map("jewel_of_life")
+  jewelOfChaos           Int      @default(0) @map("jewel_of_chaos")
+
+  // Special materials (shared across all characters)
+  scrollOfArchangel      Int      @default(0) @map("scroll_of_archangel")
+  bloodBone              Int      @default(0) @map("blood_bone")
+  devilsKey              Int      @default(0) @map("devils_key")
+  devilsEye              Int      @default(0) @map("devils_eye")
+
+  // Event tickets (shared across all characters)
+  bloodCastleTicket      Int      @default(0) @map("blood_castle_ticket")
+  devilSquareTicket      Int      @default(0) @map("devil_square_ticket")
+
   characters PlayerCharacter[]
 
   @@index([username])
@@ -64,23 +80,7 @@ model PlayerCharacter {
   lastExpPerSecond       Float    @default(0) @map("last_exp_per_second")
   lastZenPerSecond       Float    @default(0) @map("last_zen_per_second")
 
-  // Jewels (currency-like items)
-  jewelOfBless           Int      @default(0) @map("jewel_of_bless")
-  jewelOfSoul            Int      @default(0) @map("jewel_of_soul")
-  jewelOfLife            Int      @default(0) @map("jewel_of_life")
-  jewelOfChaos           Int      @default(0) @map("jewel_of_chaos")
-
-  // Special materials (currency-like items)
-  scrollOfArchangel      Int      @default(0) @map("scroll_of_archangel")
-  bloodBone              Int      @default(0) @map("blood_bone")
-  devilsKey              Int      @default(0) @map("devils_key")
-  devilsEye              Int      @default(0) @map("devils_eye")
-
-  // Event tickets
-  bloodCastleTicket      Int      @default(0) @map("blood_castle_ticket")
-  devilSquareTicket      Int      @default(0) @map("devil_square_ticket")
-
-  // Daily event entries (reset daily)
+  // Daily event entries (reset daily, per character)
   bloodCastleEntriesToday Int      @default(0) @map("blood_castle_entries_today")
   devilSquareEntriesToday Int      @default(0) @map("devil_square_entries_today")
   lastEventResetDate      DateTime? @map("last_event_reset_date")

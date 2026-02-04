@@ -152,6 +152,10 @@ export async function resetCharacter(
       levelupPoints: bonusPoints,
       resetCount: { increment: 1 },
       currentHp: null,
+      // Reset heartbeat and rates to prevent offline rewards after reset
+      lastHeartbeat: new Date(),
+      lastExpPerSecond: 0,
+      lastZenPerSecond: 0,
     },
   });
 

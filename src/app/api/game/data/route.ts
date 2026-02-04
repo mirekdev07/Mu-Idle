@@ -36,10 +36,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all data in parallel
-    const [inventory, equipment, bonuses] = await Promise.all([
+    const [inventory, equipment, bonuses, user] = await Promise.all([
       getInventory(character.id),
       getEquipment(character.id),
       getEquipmentBonuses(character.id),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          jewelOfBless: true,
+          jewelOfSoul: true,
+          jewelOfLife: true,
+          jewelOfChaos: true,
+          scrollOfArchangel: true,
+          bloodBone: true,
+          devilsKey: true,
+          devilsEye: true,
+          bloodCastleTicket: true,
+          devilSquareTicket: true,
+        },
+      }),
     ]);
 
     // Calculate stats
@@ -151,16 +166,18 @@ export async function GET(request: NextRequest) {
         monstersKilled: character.monstersKilled,
         deaths: character.deaths,
         totalPlaytime: character.totalPlaytime,
-        jewelOfBless: character.jewelOfBless,
-        jewelOfSoul: character.jewelOfSoul,
-        jewelOfLife: character.jewelOfLife,
-        jewelOfChaos: character.jewelOfChaos,
-        scrollOfArchangel: character.scrollOfArchangel,
-        bloodBone: character.bloodBone,
-        devilsKey: character.devilsKey,
-        devilsEye: character.devilsEye,
-        bloodCastleTicket: character.bloodCastleTicket,
-        devilSquareTicket: character.devilSquareTicket,
+        // Jewels and materials from user account (shared)
+        jewelOfBless: user?.jewelOfBless ?? 0,
+        jewelOfSoul: user?.jewelOfSoul ?? 0,
+        jewelOfLife: user?.jewelOfLife ?? 0,
+        jewelOfChaos: user?.jewelOfChaos ?? 0,
+        scrollOfArchangel: user?.scrollOfArchangel ?? 0,
+        bloodBone: user?.bloodBone ?? 0,
+        devilsKey: user?.devilsKey ?? 0,
+        devilsEye: user?.devilsEye ?? 0,
+        bloodCastleTicket: user?.bloodCastleTicket ?? 0,
+        devilSquareTicket: user?.devilSquareTicket ?? 0,
+        // Daily entries per character
         bloodCastleEntriesToday: character.bloodCastleEntriesToday,
         devilSquareEntriesToday: character.devilSquareEntriesToday,
       },

@@ -76,63 +76,10 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
-    const recipe = RECIPES[mix_type as MixType];
-
-    // Check if player has all required materials
-    const req = recipe.requirements;
-    if (req.scrollOfArchangel && character.scrollOfArchangel < req.scrollOfArchangel) {
-      return errorResponse('Not enough Scroll of Archangel');
-    }
-    if (req.bloodBone && character.bloodBone < req.bloodBone) {
-      return errorResponse('Not enough Blood Bone');
-    }
-    if (req.devilsKey && character.devilsKey < req.devilsKey) {
-      return errorResponse("Not enough Devil's Key");
-    }
-    if (req.devilsEye && character.devilsEye < req.devilsEye) {
-      return errorResponse("Not enough Devil's Eye");
-    }
-    if (req.jewelOfChaos && character.jewelOfChaos < req.jewelOfChaos) {
-      return errorResponse('Not enough Jewel of Chaos');
-    }
-    if (req.zen && character.zen < BigInt(req.zen)) {
-      return errorResponse('Not enough Zen');
-    }
-
-    // Consume materials and create result
-    const updateData: Record<string, { decrement?: number; increment?: number }> = {};
-
-    if (req.scrollOfArchangel) {
-      updateData.scrollOfArchangel = { decrement: req.scrollOfArchangel };
-    }
-    if (req.bloodBone) {
-      updateData.bloodBone = { decrement: req.bloodBone };
-    }
-    if (req.devilsKey) {
-      updateData.devilsKey = { decrement: req.devilsKey };
-    }
-    if (req.devilsEye) {
-      updateData.devilsEye = { decrement: req.devilsEye };
-    }
-    if (req.jewelOfChaos) {
-      updateData.jewelOfChaos = { decrement: req.jewelOfChaos };
-    }
-    if (req.zen) {
-      updateData.zen = { decrement: req.zen };
-    }
-
-    // Check success (currently all 100%)
-    const success = Math.random() < recipe.successRate;
-
-    if (success) {
-      updateData[recipe.result.field] = { increment: recipe.result.amount };
-    }
-
-    const updated = await prisma.playerCharacter.update({
-      where: { id: character.id },
-      data: updateData,
+    // Get user's materials (account-wide)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
-        zen: true,
         jewelOfChaos: true,
         scrollOfArchangel: true,
         bloodBone: true,
@@ -143,21 +90,98 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (!user) {
+      return errorResponse('User not found', 404);
+    }
+
+    const recipe = RECIPES[mix_type as MixType];
+
+    // Check if player has all required materials (from user account)
+    const req = recipe.requirements;
+    if (req.scrollOfArchangel && user.scrollOfArchangel < req.scrollOfArchangel) {
+      return errorResponse('Not enough Scroll of Archangel');
+    }
+    if (req.bloodBone && user.bloodBone < req.bloodBone) {
+      return errorResponse('Not enough Blood Bone');
+    }
+    if (req.devilsKey && user.devilsKey < req.devilsKey) {
+      return errorResponse("Not enough Devil's Key");
+    }
+    if (req.devilsEye && user.devilsEye < req.devilsEye) {
+      return errorResponse("Not enough Devil's Eye");
+    }
+    if (req.jewelOfChaos && user.jewelOfChaos < req.jewelOfChaos) {
+      return errorResponse('Not enough Jewel of Chaos');
+    }
+    if (req.zen && character.zen < BigInt(req.zen)) {
+      return errorResponse('Not enough Zen');
+    }
+
+    // Consume materials from user account
+    const userUpdateData: Record<string, { decrement?: number; increment?: number }> = {};
+
+    if (req.scrollOfArchangel) {
+      userUpdateData.scrollOfArchangel = { decrement: req.scrollOfArchangel };
+    }
+    if (req.bloodBone) {
+      userUpdateData.bloodBone = { decrement: req.bloodBone };
+    }
+    if (req.devilsKey) {
+      userUpdateData.devilsKey = { decrement: req.devilsKey };
+    }
+    if (req.devilsEye) {
+      userUpdateData.devilsEye = { decrement: req.devilsEye };
+    }
+    if (req.jewelOfChaos) {
+      userUpdateData.jewelOfChaos = { decrement: req.jewelOfChaos };
+    }
+
+    // Check success (currently all 100%)
+    const success = Math.random() < recipe.successRate;
+
+    if (success) {
+      userUpdateData[recipe.result.field] = { increment: recipe.result.amount };
+    }
+
+    // Update user materials and character zen in parallel
+    const [updatedUser, updatedCharacter] = await Promise.all([
+      prisma.user.update({
+        where: { id: userId },
+        data: userUpdateData,
+        select: {
+          jewelOfChaos: true,
+          scrollOfArchangel: true,
+          bloodBone: true,
+          devilsKey: true,
+          devilsEye: true,
+          bloodCastleTicket: true,
+          devilSquareTicket: true,
+        },
+      }),
+      req.zen
+        ? prisma.playerCharacter.update({
+            where: { id: character.id },
+            data: { zen: { decrement: req.zen } },
+            select: { zen: true },
+          })
+        : Promise.resolve({ zen: character.zen }),
+    ]);
+
     return NextResponse.json({
       success: true,
       mixSuccess: success,
       resultName: recipe.name,
-      zen: updated.zen.toString(),
+      zen: updatedCharacter.zen.toString(),
       materials: {
-        chaos: updated.jewelOfChaos,
-        archangel: updated.scrollOfArchangel,
-        bloodbone: updated.bloodBone,
-        devilskey: updated.devilsKey,
-        devilseye: updated.devilsEye,
+        chaos: updatedUser.jewelOfChaos,
+        archangel: updatedUser.scrollOfArchangel,
+        bloodbone: updatedUser.bloodBone,
+        devilskey: updatedUser.devilsKey,
+        devilseye: updatedUser.devilsEye,
       },
       tickets: {
-        bloodCastle: updated.bloodCastleTicket,
-        devilSquare: updated.devilSquareTicket,
+        bloodCastle: updatedUser.bloodCastleTicket,
+        devilSquare: updatedUser.devilSquareTicket,
       },
     });
   } catch (error) {

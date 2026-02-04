@@ -8,7 +8,7 @@ interface CraftingPanelProps {
   jewelOfBless: number;
   jewelOfSoul: number;
   jewelOfLife: number;
-  onCraft: (action: 'bless' | 'soul' | 'life') => Promise<{ success: boolean; message: string; newItem?: Item }>;
+  onCraft: (action: 'bless' | 'bless_max' | 'soul' | 'life') => Promise<{ success: boolean; message: string; newItem?: Item }>;
   onClose: () => void;
 }
 
@@ -66,6 +66,8 @@ export default function CraftingPanel({
 
   const currentLevel = item.enhancementLevel || 0;
   const canUseBless = currentLevel < 6 && jewelOfBless > 0;
+  const blessNeededForMax = 6 - currentLevel;
+  const canUseBlessMax = currentLevel < 6 && jewelOfBless >= blessNeededForMax && blessNeededForMax > 1;
   const canUseSoul = currentLevel >= 6 && currentLevel < 9 && jewelOfSoul > 0;
 
   // Check if item is a weapon (category 0-5)
@@ -76,7 +78,7 @@ export default function CraftingPanel({
   const existingLifeBonus = item.options?.find(o => o.type === lifeOptionType)?.value || 0;
   const canUseLife = existingLifeBonus < 16 && jewelOfLife > 0;
 
-  const handleCraft = async (action: 'bless' | 'soul' | 'life') => {
+  const handleCraft = async (action: 'bless' | 'bless_max' | 'soul' | 'life') => {
     setIsProcessing(true);
     setResultMessage(null);
 
@@ -156,13 +158,23 @@ export default function CraftingPanel({
             Upgrade item to +{Math.min(currentLevel + 1, 6)} (100% success)
             {currentLevel >= 6 && <span className="text-yellow-400 ml-2">Max level reached!</span>}
           </div>
-          <button
-            onClick={() => handleCraft('bless')}
-            disabled={!canUseBless || isProcessing}
-            className="w-full py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded font-bold text-sm"
-          >
-            {isProcessing ? 'Processing...' : 'Use Jewel of Bless'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleCraft('bless')}
+              disabled={!canUseBless || isProcessing}
+              className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:cursor-not-allowed rounded font-bold text-sm"
+            >
+              {isProcessing ? 'Processing...' : '+1 Level'}
+            </button>
+            <button
+              onClick={() => handleCraft('bless_max')}
+              disabled={!canUseBlessMax || isProcessing}
+              className="flex-1 py-2 bg-purple-700 hover:bg-purple-600 disabled:bg-gray-700 disabled:cursor-not-allowed rounded font-bold text-sm"
+              title={`Use ${blessNeededForMax} jewels to instantly upgrade to +6`}
+            >
+              {isProcessing ? '...' : `Instant +6 (${blessNeededForMax}x)`}
+            </button>
+          </div>
         </div>
 
         {/* Jewel of Soul - Level +7 to +9 */}

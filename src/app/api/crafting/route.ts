@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { character_id, inventory_slot, action } = body;
 
-    if (!['bless', 'soul', 'life'].includes(action)) {
+    if (!['bless', 'bless_max', 'soul', 'life'].includes(action)) {
       return errorResponse('Invalid crafting action');
     }
 
@@ -28,6 +28,20 @@ export async function POST(request: NextRequest) {
     }
     if (!character) {
       return errorResponse('Character not found', 404);
+    }
+
+    // Get user's jewels
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        jewelOfBless: true,
+        jewelOfSoul: true,
+        jewelOfLife: true,
+      },
+    });
+
+    if (!user) {
+      return errorResponse('User not found', 404);
     }
 
     // Get the inventory item
@@ -55,7 +69,7 @@ export async function POST(request: NextRequest) {
       jewelField = 'jewelOfBless';
 
       // Check if player has jewels
-      if (character.jewelOfBless < 1) {
+      if (user.jewelOfBless < 1) {
         return errorResponse('Not enough Jewel of Bless');
       }
 
@@ -82,11 +96,101 @@ export async function POST(request: NextRequest) {
       }
       message = `Success! Item upgraded to +${currentLevel + 1}`;
 
+    } else if (action === 'bless_max') {
+      jewelField = 'jewelOfBless';
+
+      // Calculate how many levels to upgrade (up to +6)
+      const levelsNeeded = 6 - currentLevel;
+
+      if (levelsNeeded <= 0) {
+        return errorResponse('Item already at maximum level for Jewel of Bless (+6)');
+      }
+
+      // Check if player has enough jewels
+      if (user.jewelOfBless < levelsNeeded) {
+        return errorResponse(`Not enough Jewel of Bless (need ${levelsNeeded}, have ${user.jewelOfBless})`);
+      }
+
+      // 100% success rate - upgrade all levels at once
+      success = true;
+
+      // Enhancement increases actual stats: +3 damage per level for weapons, +2 defense per level for armor
+      const totalStatBonus = levelsNeeded * (isWeapon ? 3 : 2);
+      if (isWeapon) {
+        updateData = {
+          enhancementLevel: 6,
+          damageMin: inventoryItem.damageMin + totalStatBonus,
+          damageMax: inventoryItem.damageMax + totalStatBonus,
+        };
+      } else {
+        updateData = {
+          enhancementLevel: 6,
+          defenseValue: inventoryItem.defenseValue + totalStatBonus,
+        };
+      }
+      message = `Success! Item upgraded to +6 (used ${levelsNeeded} jewels)`;
+
+      // Deduct all jewels at once
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          jewelOfBless: { decrement: levelsNeeded },
+        },
+      });
+
+      // Update item
+      await prisma.playerInventory.update({
+        where: { id: inventoryItem.id },
+        data: updateData,
+      });
+
+      // Get updated user jewels
+      const updatedUserBlessMax = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          jewelOfBless: true,
+          jewelOfSoul: true,
+          jewelOfLife: true,
+        },
+      });
+
+      // Get updated item
+      const updatedItemBlessMax = await prisma.playerInventory.findFirst({
+        where: {
+          characterId: character.id,
+          slotIndex: inventory_slot,
+        },
+      });
+
+      return NextResponse.json({
+        success,
+        message,
+        jewels: {
+          bless: updatedUserBlessMax?.jewelOfBless || 0,
+          soul: updatedUserBlessMax?.jewelOfSoul || 0,
+          life: updatedUserBlessMax?.jewelOfLife || 0,
+        },
+        item: updatedItemBlessMax ? {
+          slotIndex: updatedItemBlessMax.slotIndex,
+          name: updatedItemBlessMax.itemName,
+          emoji: updatedItemBlessMax.itemEmoji,
+          rarity: updatedItemBlessMax.itemRarity,
+          level: updatedItemBlessMax.itemLevel,
+          damageMin: updatedItemBlessMax.damageMin,
+          damageMax: updatedItemBlessMax.damageMax,
+          defense: updatedItemBlessMax.defenseValue,
+          attackSpeed: updatedItemBlessMax.attackSpeed,
+          category: updatedItemBlessMax.category,
+          enhancementLevel: updatedItemBlessMax.enhancementLevel,
+          options: updatedItemBlessMax.itemOptions ? JSON.parse(updatedItemBlessMax.itemOptions) : null,
+        } : null,
+      });
+
     } else if (action === 'soul') {
       jewelField = 'jewelOfSoul';
 
       // Check if player has jewels
-      if (character.jewelOfSoul < 1) {
+      if (user.jewelOfSoul < 1) {
         return errorResponse('Not enough Jewel of Soul');
       }
 
@@ -125,7 +229,7 @@ export async function POST(request: NextRequest) {
       jewelField = 'jewelOfLife';
 
       // Check if player has jewels
-      if (character.jewelOfLife < 1) {
+      if (user.jewelOfLife < 1) {
         return errorResponse('Not enough Jewel of Life');
       }
 
@@ -188,9 +292,9 @@ export async function POST(request: NextRequest) {
       return errorResponse('Invalid action');
     }
 
-    // Deduct jewel from character
-    await prisma.playerCharacter.update({
-      where: { id: character.id },
+    // Deduct jewel from user account
+    await prisma.user.update({
+      where: { id: userId },
       data: {
         [jewelField]: { decrement: 1 },
       },
@@ -204,9 +308,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get updated character jewels
-    const updatedCharacter = await prisma.playerCharacter.findUnique({
-      where: { id: character.id },
+    // Get updated user jewels
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: userId },
       select: {
         jewelOfBless: true,
         jewelOfSoul: true,
@@ -226,9 +330,9 @@ export async function POST(request: NextRequest) {
       success,
       message,
       jewels: {
-        bless: updatedCharacter?.jewelOfBless || 0,
-        soul: updatedCharacter?.jewelOfSoul || 0,
-        life: updatedCharacter?.jewelOfLife || 0,
+        bless: updatedUser?.jewelOfBless || 0,
+        soul: updatedUser?.jewelOfSoul || 0,
+        life: updatedUser?.jewelOfLife || 0,
       },
       item: updatedItem ? {
         slotIndex: updatedItem.slotIndex,

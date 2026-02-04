@@ -53,7 +53,7 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Battle Scepter': '/images/items/2/8.webp',
   'Crystal Morning Star': '/images/items/2/4.webp',
   'Crystal Sword': '/images/items/2/5.webp',
-  'Master Scepter': '/images/items/2/21.webp',
+  'Master Scepter': '/images/items/2/9.webp',
   'Great Scepter': '/images/items/2/10.webp',
   'Elemental Mace': '/images/items/2/7.webp',
   'Lord Scepter': '/images/items/2/11.webp',
@@ -359,4 +359,32 @@ export function getItemImagePath(itemName: string): string | null {
 export function hasItemImage(itemName: string): boolean {
   const path = ITEM_IMAGES[itemName];
   return path != null && !path.endsWith('/');
+}
+
+// Rozmiary itemów (domyślnie 76px, tutaj tylko wyjątki)
+const ITEM_SIZES: Record<string, number> = {
+  // Armor - mniejsze
+  'Plate Armor': 50,
+
+  // Ringi - mniejsze
+  'Ring of Ice': 52,
+  'Ring of Poison': 52,
+  'Ring of Fire': 52,
+  'Ring of Earth': 52,
+  'Ring of Wind': 52,
+  'Ring of Magic': 52,
+
+  // Pendanty - mniejsze
+  'Pendant of Lightning': 44,
+  'Pendant of Fire': 44,
+  'Pendant of Ice': 44,
+  'Pendant of Wind': 44,
+  'Pendant of Water': 44,
+  'Pendant of Ability': 44,
+};
+
+const DEFAULT_ITEM_SIZE = 76;
+
+export function getItemImageSize(itemName: string): number {
+  return ITEM_SIZES[itemName] ?? DEFAULT_ITEM_SIZE;
 }

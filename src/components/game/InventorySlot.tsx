@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { Item, Equipment, EQUIPMENT_SLOTS } from '@/types/game';
 import ItemModal from './ItemModal';
-import { getItemImagePath } from '@/lib/game/itemImages';
+import { getItemImagePath, getItemImageSize } from '@/lib/game/itemImages';
 
 interface InventorySlotProps {
   item: Item | null;
@@ -181,7 +181,7 @@ export default function InventorySlot({
   return (
     <>
       <div
-        className={`relative w-12 h-12 bg-gray-800 border-2 ${borderClass} rounded cursor-pointer hover:bg-gray-700 transition-colors flex items-center justify-center`}
+        className={`relative w-16 h-16 bg-gray-800 border-2 ${borderClass} rounded cursor-pointer hover:bg-gray-700 transition-colors flex items-center justify-center`}
         onClick={handleClick}
       >
         {item ? (
@@ -189,8 +189,8 @@ export default function InventorySlot({
             <Image
               src={getItemImagePath(item.name)!}
               alt={item.name}
-              width={44}
-              height={44}
+              width={getItemImageSize(item.name)}
+              height={getItemImageSize(item.name)}
               className="object-contain"
             />
           ) : (
@@ -210,7 +210,7 @@ export default function InventorySlot({
         {/* Comparison indicator */}
         {comparison && (comparison.isBetter || comparison.isWorse) && (
           <span
-            className={`absolute -bottom-1 -left-1 text-xs font-bold px-1 rounded ${
+            className={`absolute -bottom-0.5 -left-0.5 text-[9px] font-bold px-0.5 rounded ${
               comparison.isBetter ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
             }`}
           >

@@ -25,12 +25,6 @@ interface HuntingPanelProps {
   onMonsterKill: () => void;
 }
 
-interface CombatLog {
-  id: number;
-  message: string;
-  type: 'damage' | 'heal' | 'exp' | 'item' | 'death' | 'info';
-}
-
 interface ActiveMonster extends Monster {
   currentHp: number;
   maxHp: number;
@@ -75,7 +69,6 @@ export default function HuntingPanel({
   const [selectedLocation, setSelectedLocation] = useState(0);
   const [isHunting, setIsHunting] = useState(false);
   const [currentMonster, setCurrentMonster] = useState<ActiveMonster | null>(null);
-  const [combatLog, setCombatLog] = useState<CombatLog[]>([]);
   const [monstersKilled, setMonstersKilled] = useState(0);
   const [floatingDamages, setFloatingDamages] = useState<FloatingDamage[]>([]);
   const [respawnCountdown, setRespawnCountdown] = useState<number | null>(null);
@@ -97,21 +90,16 @@ export default function HuntingPanel({
     return () => clearInterval(interval);
   }, [isHunting]);
 
-  const logIdRef = useRef(0);
   const damageIdRef = useRef(0);
   const combatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const wasHuntingBeforeDeathRef = useRef(false);
-  const logContainerRef = useRef<HTMLDivElement>(null);
 
   const location = LOCATIONS[selectedLocation];
   const isDead = currentHp <= 0;
 
-  const addLog = useCallback((message: string, type: CombatLog['type']) => {
-    logIdRef.current += 1;
-    setCombatLog((prev) => [
-      ...prev.slice(-49),
-      { id: logIdRef.current, message, type },
-    ]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const addLog = useCallback((_message: string, _type: string) => {
+    // Combat log removed
   }, []);
 
   const addFloatingDamage = useCallback((damage: number, type: FloatingDamage['type']) => {
@@ -179,17 +167,33 @@ export default function HuntingPanel({
     return () => clearTimeout(timer);
   }, [respawnCountdown, maxHp, onHpChange, addLog, spawnMonster, location.name]);
 
-  // Handle death - start respawn countdown
+  // Ref to track zone where player died (to go back one zone)
+  const diedInZoneRef = useRef<number | null>(null);
+
+  // Handle death - start respawn countdown and go back one zone
   useEffect(() => {
     if (isDead && respawnCountdown === null && isHunting) {
       wasHuntingBeforeDeathRef.current = true;
+      diedInZoneRef.current = selectedLocation; // Remember where we died
       setIsHunting(false);
       setCurrentMonster(null);
       addLog('You have been defeated! Respawning in 5 seconds...', 'death');
       setRespawnCountdown(5);
       onDeath();
     }
-  }, [isDead, respawnCountdown, isHunting, addLog, onDeath]);
+  }, [isDead, respawnCountdown, isHunting, addLog, onDeath, selectedLocation]);
+
+  // After respawn, go back one zone if we died
+  useEffect(() => {
+    if (respawnCountdown === 0 && diedInZoneRef.current !== null) {
+      const deathZone = diedInZoneRef.current;
+      // Go back one zone (minimum zone 0)
+      if (deathZone > 0) {
+        setSelectedLocation(deathZone - 1);
+      }
+      diedInZoneRef.current = null;
+    }
+  }, [respawnCountdown]);
 
   const performCombatRound = useCallback(() => {
     if (!currentMonster || currentHp <= 0) return;
@@ -229,45 +233,45 @@ export default function HuntingPanel({
         addLog(`+${healAmount} HP recovered!`, 'heal');
       }
 
-      // Check for item drop (7% chance)
-      if (Math.random() < 0.025) {
+      // Check for item drop (2% chance)
+      if (Math.random() < 0.02) {
         onItemDrop(currentMonster.level);
         addLog('An item dropped!', 'item');
       }
 
-      // Check for jewel drops (1% each type, only from monsters level 41+)
+      // Check for jewel drops (0.8% each type, only from monsters level 41+)
       if (currentMonster.level >= 41) {
-        if (Math.random() < 0.01) {
+        if (Math.random() < 0.008) {
           onJewelDrop('bless');
           addLog('💎 Jewel of Bless dropped!', 'item');
         }
-        if (Math.random() < 0.01) {
+        if (Math.random() < 0.008) {
           onJewelDrop('soul');
           addLog('💎 Jewel of Soul dropped!', 'item');
         }
-        if (Math.random() < 0.01) {
+        if (Math.random() < 0.008) {
           onJewelDrop('life');
           addLog('💎 Jewel of Life dropped!', 'item');
         }
-        // Jewel of Chaos - rare drop (0.5%)
-        if (Math.random() < 0.005) {
+        // Jewel of Chaos - rare drop (0.4%)
+        if (Math.random() < 0.004) {
           onJewelDrop('chaos');
           addLog('💎 Jewel of Chaos dropped!', 'item');
         }
-        // Special materials - rare drops (0.5% each)
-        if (Math.random() < 0.005) {
+        // Special materials - drops (0.8% each)
+        if (Math.random() < 0.008) {
           onJewelDrop('archangel');
           addLog('📜 Scroll of Archangel dropped!', 'item');
         }
-        if (Math.random() < 0.005) {
+        if (Math.random() < 0.008) {
           onJewelDrop('bloodbone');
           addLog('🦴 Blood Bone dropped!', 'item');
         }
-        if (Math.random() < 0.005) {
+        if (Math.random() < 0.008) {
           onJewelDrop('devilskey');
           addLog('🗝️ Devil\'s Key dropped!', 'item');
         }
-        if (Math.random() < 0.005) {
+        if (Math.random() < 0.008) {
           onJewelDrop('devilseye');
           addLog('👁️ Devil\'s Eye dropped!', 'item');
         }
@@ -337,13 +341,6 @@ export default function HuntingPanel({
     spawnMonster,
   ]);
 
-  // Auto-scroll combat log to bottom
-  useEffect(() => {
-    if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-    }
-  }, [combatLog]);
-
   // Combat loop
   useEffect(() => {
     if (isHunting && currentHp > 0) {
@@ -387,7 +384,7 @@ export default function HuntingPanel({
     <div className="space-y-4">
       {/* Location Selector - Custom Dropdown */}
       <div className="relative">
-        <label className="text-xs text-gray-400 mb-1 block">Location</label>
+        <label className="text-xs text-gray-400 mb-1 block">Hunting Zone</label>
         <button
           onClick={() => !isHunting && !isDead && setLocationDropdownOpen(!locationDropdownOpen)}
           disabled={isHunting || isDead}
@@ -466,6 +463,12 @@ export default function HuntingPanel({
             </div>
           </>
         )}
+
+        {/* Zone info */}
+        <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+          <span>💀</span>
+          <span>On death, you will be moved back one zone.</span>
+        </div>
       </div>
 
       {/* Combat Area */}
@@ -578,27 +581,6 @@ export default function HuntingPanel({
         {/* Stats */}
         <div className="mt-4 text-center text-xs text-gray-500">
           Monsters killed: {monstersKilled}
-        </div>
-      </div>
-
-      {/* Combat Log */}
-      <div ref={logContainerRef} className="bg-gray-900 rounded-lg p-3 h-32 overflow-y-auto">
-        <div className="text-xs space-y-1">
-          {combatLog.map((log) => (
-            <div
-              key={log.id}
-              className={`${
-                log.type === 'damage' ? 'text-red-400' :
-                log.type === 'heal' ? 'text-green-400' :
-                log.type === 'exp' ? 'text-yellow-400' :
-                log.type === 'item' ? 'text-purple-400' :
-                log.type === 'death' ? 'text-red-600 font-bold' :
-                'text-gray-400'
-              }`}
-            >
-              {log.message}
-            </div>
-          ))}
         </div>
       </div>
 

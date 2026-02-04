@@ -102,7 +102,10 @@ export default function HomePage() {
 
   const loadGameData = useCallback(async () => {
     try {
-      const response = await fetch('/api/game/data');
+      const urlParams = new URLSearchParams(window.location.search);
+      const characterId = urlParams.get('character_id');
+      const url = characterId ? `/api/game/data?character_id=${characterId}` : '/api/game/data';
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.success) {
@@ -176,9 +179,25 @@ export default function HomePage() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
+    // Mobile: save on visibility change (when user switches apps or tabs)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        saveProgress(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Mobile: save on page hide (iOS Safari)
+    const handlePageHide = () => {
+      saveProgress(false);
+    };
+    window.addEventListener('pagehide', handlePageHide);
+
     return () => {
       clearInterval(saveInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
     };
   }, [gameData, localMonstersKilled, localDeaths, expPerSecond, zenPerSecond]);
 
@@ -251,10 +270,15 @@ export default function HomePage() {
     };
 
     // Calculate new maxHp for new level (same formula as stats.service.ts)
-    // HP = 100 + (vitality * 5) + (level * 3)
-    const newMaxHp = leveledUp
-      ? Math.floor(100 + gameData.character.vitality * 5 + newLevel * 3)
-      : gameData.stats.maxHp;
+    // HP = 100 + (vitality * 5) + (level * 3), then apply equipment bonus
+    let newMaxHp = gameData.stats.maxHp;
+    if (leveledUp) {
+      let baseHp = Math.floor(100 + gameData.character.vitality * 5 + newLevel * 3);
+      if (equipmentBonuses.max_hp > 0) {
+        baseHp = Math.floor(baseHp * (1 + equipmentBonuses.max_hp / 100));
+      }
+      newMaxHp = baseHp;
+    }
 
     const newStats = leveledUp
       ? { ...gameData.stats, maxHp: newMaxHp }
@@ -562,7 +586,7 @@ export default function HomePage() {
     }, 100);
   };
 
-  const handleCraftAction = async (action: 'bless' | 'soul' | 'life'): Promise<{ success: boolean; message: string; newItem?: Item }> => {
+  const handleCraftAction = async (action: 'bless' | 'bless_max' | 'soul' | 'life'): Promise<{ success: boolean; message: string; newItem?: Item }> => {
     if (!gameData || !craftingItem) {
       return { success: false, message: 'No item selected' };
     }
@@ -673,7 +697,7 @@ export default function HomePage() {
     minDamage: stats.minDamage + (equipmentBonuses.damage_min || 0),
     maxDamage: stats.maxDamage + (equipmentBonuses.damage_max || 0),
     defense: stats.physicalDefense + (equipmentBonuses.defense || 0),
-    attackSpeed: stats.attackSpeed + (equipmentBonuses.attack_speed || 0),
+    attackSpeed: Math.min(200, stats.attackSpeed + (equipmentBonuses.attack_speed || 0)),
   };
 
   // EXP calculation helper
@@ -943,28 +967,6 @@ export default function HomePage() {
                 <span className="text-gray-400">Deaths:</span>
                 <span className="text-red-400">{localDeaths.toLocaleString()}</span>
               </div>
-              {/* Jewels */}
-              <div className="mt-2 pt-2 border-t border-gray-700">
-                <div className="text-xs text-gray-500 mb-1">Jewels</div>
-                <div className="grid grid-cols-4 gap-1 text-xs">
-                  <div className="flex flex-col items-center">
-                    <span className="text-purple-300">💎 {character.jewelOfBless}</span>
-                    <span className="text-gray-500 text-[10px]">Bless</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="text-pink-400">💎 {character.jewelOfSoul}</span>
-                    <span className="text-gray-500 text-[10px]">Soul</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="text-orange-400">💎 {character.jewelOfLife}</span>
-                    <span className="text-gray-500 text-[10px]">Life</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <span className="text-yellow-400">💎 {character.jewelOfChaos}</span>
-                    <span className="text-gray-500 text-[10px]">Chaos</span>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Base Stats */}
@@ -1017,6 +1019,12 @@ export default function HomePage() {
                         >
                           +50
                         </button>
+                        <button
+                          onClick={() => handleAddStat(key, character.levelupPoints)}
+                          className="px-1 h-5 bg-red-600 hover:bg-red-500 rounded text-xs font-bold"
+                        >
+                          max
+                        </button>
                       </>
                     )}
                   </div>
@@ -1061,7 +1069,48 @@ export default function HomePage() {
                 <div><span className="text-gray-500">Defense:</span><span className="ml-1 text-blue-400">{totalStats.defense}</span></div>
                 <div><span className="text-gray-500">HP:</span><span className="ml-1 text-red-400">{stats.maxHp}</span></div>
                 <div><span className="text-gray-500">Crit:</span><span className="ml-1">{stats.criticalRate}%</span></div>
-                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-orange-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 175 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
+                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-orange-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
+              </div>
+            </div>
+
+            {/* Crafting Materials - Desktop */}
+            <div className="mt-3 pt-3 border-t border-gray-700">
+              <h3 className="text-xs font-semibold text-gray-400 mb-2">Crafting Materials</h3>
+              <div className="grid grid-cols-4 gap-1 text-xs">
+                <div className="flex flex-col items-center">
+                  <span className="text-purple-300">💎 {character.jewelOfBless}</span>
+                  <span className="text-gray-500 text-[10px]">Bless</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-pink-400">💎 {character.jewelOfSoul}</span>
+                  <span className="text-gray-500 text-[10px]">Soul</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-orange-400">💎 {character.jewelOfLife}</span>
+                  <span className="text-gray-500 text-[10px]">Life</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-yellow-400">💎 {character.jewelOfChaos}</span>
+                  <span className="text-gray-500 text-[10px]">Chaos</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-xs mt-2">
+                <div className="flex flex-col items-center">
+                  <span className="text-cyan-400">📜 {character.scrollOfArchangel}</span>
+                  <span className="text-gray-500 text-[10px]">Scroll</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-red-400">🦴 {character.bloodBone}</span>
+                  <span className="text-gray-500 text-[10px]">Bone</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-amber-400">🗝️ {character.devilsKey}</span>
+                  <span className="text-gray-500 text-[10px]">Key</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-green-400">👁️ {character.devilsEye}</span>
+                  <span className="text-gray-500 text-[10px]">Eye</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1175,6 +1224,53 @@ export default function HomePage() {
                 onMonsterKill={handleMonsterKill}
               />
             </div>
+
+            {/* Crafting Materials - Mobile */}
+            <div className="mt-3 bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+              <h3 className="text-sm font-semibold text-yellow-400 mb-2">Crafting Materials</h3>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-purple-300">💎</div>
+                  <div className="text-purple-300 font-bold">{character.jewelOfBless}</div>
+                  <div className="text-gray-500 text-[10px]">Bless</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-pink-400">💎</div>
+                  <div className="text-pink-400 font-bold">{character.jewelOfSoul}</div>
+                  <div className="text-gray-500 text-[10px]">Soul</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-orange-400">💎</div>
+                  <div className="text-orange-400 font-bold">{character.jewelOfLife}</div>
+                  <div className="text-gray-500 text-[10px]">Life</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-yellow-400">💎</div>
+                  <div className="text-yellow-400 font-bold">{character.jewelOfChaos}</div>
+                  <div className="text-gray-500 text-[10px]">Chaos</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-cyan-400">📜</div>
+                  <div className="text-cyan-400 font-bold">{character.scrollOfArchangel}</div>
+                  <div className="text-gray-500 text-[10px]">Scroll</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-red-400">🦴</div>
+                  <div className="text-red-400 font-bold">{character.bloodBone}</div>
+                  <div className="text-gray-500 text-[10px]">Blood Bone</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-amber-400">🗝️</div>
+                  <div className="text-amber-400 font-bold">{character.devilsKey}</div>
+                  <div className="text-gray-500 text-[10px]">Devil Key</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-green-400">👁️</div>
+                  <div className="text-green-400 font-bold">{character.devilsEye}</div>
+                  <div className="text-gray-500 text-[10px]">Devil Eye</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Character Tab */}
@@ -1264,6 +1360,7 @@ export default function HomePage() {
                             <button onClick={() => handleAddStat(key, 5)} className="px-2 h-7 bg-green-600 hover:bg-green-500 rounded text-sm font-bold">+5</button>
                             <button onClick={() => handleAddStat(key, 10)} disabled={character.levelupPoints < 10} className="px-2 h-7 bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-sm font-bold">+10</button>
                             <button onClick={() => handleAddStat(key, 50)} disabled={character.levelupPoints < 50} className="px-2 h-7 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-sm font-bold">+50</button>
+                            <button onClick={() => handleAddStat(key, character.levelupPoints)} className="px-2 h-7 bg-red-600 hover:bg-red-500 rounded text-sm font-bold">max</button>
                           </>
                         )}
                       </div>
@@ -1323,7 +1420,7 @@ export default function HomePage() {
                     <div className="bg-gray-700/50 rounded p-2 col-span-2">
                       <span className="text-gray-500">ATK Speed:</span>
                       <span className="ml-1 text-orange-400 font-bold">{totalStats.attackSpeed}</span>
-                      {totalStats.attackSpeed >= 175 && <span className="text-green-400 ml-1">(max)</span>}
+                      {totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}
                     </div>
                   </div>
                 </div>

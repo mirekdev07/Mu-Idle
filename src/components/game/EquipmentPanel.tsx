@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { Equipment, EquipmentSlotKey, Item } from '@/types/game';
 import ItemModal from './ItemModal';
-import { getItemImagePath } from '@/lib/game/itemImages';
+import { getItemImagePath, getItemImageSize } from '@/lib/game/itemImages';
 
 interface EquipmentPanelProps {
   equipment: Equipment;
@@ -72,8 +72,8 @@ export default function EquipmentPanel({ equipment, onUnequip }: EquipmentPanelP
                   <Image
                     src={getItemImagePath(item.name)!}
                     alt={item.name}
-                    width={48}
-                    height={48}
+                    width={getItemImageSize(item.name)}
+                    height={getItemImageSize(item.name)}
                     className="object-contain mx-auto"
                   />
                 ) : (

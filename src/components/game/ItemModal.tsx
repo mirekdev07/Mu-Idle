@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { Item, Equipment, EQUIPMENT_SLOTS } from '@/types/game';
-import { getItemImagePath } from '@/lib/game/itemImages';
+import { getItemImagePath, getItemImageSize } from '@/lib/game/itemImages';
 
 interface ItemModalProps {
   item: Item;
@@ -143,8 +143,8 @@ export default function ItemModal({
               <Image
                 src={getItemImagePath(item.name)!}
                 alt={item.name}
-                width={56}
-                height={56}
+                width={getItemImageSize(item.name)}
+                height={getItemImageSize(item.name)}
                 className="object-contain"
               />
             ) : (

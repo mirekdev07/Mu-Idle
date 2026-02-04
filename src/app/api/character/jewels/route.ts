@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId, unauthorizedResponse, errorResponse } from '@/lib/auth-utils';
-import { getCharacterById, getLatestCharacter } from '@/lib/services/character.service';
 import prisma from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
@@ -9,22 +8,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { character_id, jewel_type, amount = 1 } = body;
+    const { jewel_type, amount = 1 } = body;
 
     const validTypes = ['bless', 'soul', 'life', 'chaos', 'archangel', 'bloodbone', 'devilskey', 'devilseye'];
     if (!jewel_type || !validTypes.includes(jewel_type)) {
       return errorResponse('Invalid jewel type');
-    }
-
-    let character;
-    if (character_id) {
-      character = await getCharacterById(character_id, userId);
-    }
-    if (!character) {
-      character = await getLatestCharacter(userId);
-    }
-    if (!character) {
-      return errorResponse('Character not found', 404);
     }
 
     const fieldMap: Record<string, string> = {
@@ -40,8 +28,8 @@ export async function POST(request: NextRequest) {
 
     const field = fieldMap[jewel_type];
 
-    const updated = await prisma.playerCharacter.update({
-      where: { id: character.id },
+    const updated = await prisma.user.update({
+      where: { id: userId },
       data: {
         [field]: { increment: amount },
       },

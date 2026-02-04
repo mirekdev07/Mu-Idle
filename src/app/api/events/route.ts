@@ -39,26 +39,39 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
+    // Get user's tickets (account-wide)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        bloodCastleTicket: true,
+        devilSquareTicket: true,
+      },
+    });
+
+    if (!user) {
+      return errorResponse('User not found', 404);
+    }
+
     const now = new Date();
     const lastReset = character.lastEventResetDate;
     const needsReset = !lastReset || !isSameDay(lastReset, now);
 
-    // Reset daily entries if it's a new day
+    // Reset daily entries if it's a new day (per character)
     let bloodCastleEntries = needsReset ? 0 : character.bloodCastleEntriesToday;
     let devilSquareEntries = needsReset ? 0 : character.devilSquareEntriesToday;
 
     const eventType = event_type as EventType;
 
-    // Check ticket availability
+    // Check ticket availability (from user account)
     if (eventType === 'blood_castle') {
-      if (character.bloodCastleTicket < 1) {
+      if (user.bloodCastleTicket < 1) {
         return errorResponse('No Blood Castle Ticket available');
       }
       if (bloodCastleEntries >= MAX_DAILY_ENTRIES) {
         return errorResponse('Daily entry limit reached (2/2)');
       }
     } else {
-      if (character.devilSquareTicket < 1) {
+      if (user.devilSquareTicket < 1) {
         return errorResponse('No Devil Square Ticket available');
       }
       if (devilSquareEntries >= MAX_DAILY_ENTRIES) {
@@ -66,44 +79,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Consume ticket and increment entries
-    const updateData: Record<string, unknown> = {
+    // Update character daily entries
+    const characterUpdateData: Record<string, unknown> = {
       lastEventResetDate: now,
     };
 
     if (needsReset) {
-      updateData.bloodCastleEntriesToday = 0;
-      updateData.devilSquareEntriesToday = 0;
+      characterUpdateData.bloodCastleEntriesToday = 0;
+      characterUpdateData.devilSquareEntriesToday = 0;
     }
 
     if (eventType === 'blood_castle') {
-      updateData.bloodCastleTicket = { decrement: 1 };
-      updateData.bloodCastleEntriesToday = (needsReset ? 0 : bloodCastleEntries) + 1;
+      characterUpdateData.bloodCastleEntriesToday = (needsReset ? 0 : bloodCastleEntries) + 1;
     } else {
-      updateData.devilSquareTicket = { decrement: 1 };
-      updateData.devilSquareEntriesToday = (needsReset ? 0 : devilSquareEntries) + 1;
+      characterUpdateData.devilSquareEntriesToday = (needsReset ? 0 : devilSquareEntries) + 1;
     }
 
-    const updated = await prisma.playerCharacter.update({
-      where: { id: character.id },
-      data: updateData,
-      select: {
-        bloodCastleTicket: true,
-        devilSquareTicket: true,
-        bloodCastleEntriesToday: true,
-        devilSquareEntriesToday: true,
-      },
-    });
+    // Update user tickets and character entries in parallel
+    const [updatedUser, updatedCharacter] = await Promise.all([
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          [eventType === 'blood_castle' ? 'bloodCastleTicket' : 'devilSquareTicket']: { decrement: 1 },
+        },
+        select: {
+          bloodCastleTicket: true,
+          devilSquareTicket: true,
+        },
+      }),
+      prisma.playerCharacter.update({
+        where: { id: character.id },
+        data: characterUpdateData,
+        select: {
+          bloodCastleEntriesToday: true,
+          devilSquareEntriesToday: true,
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       success: true,
       tickets: {
-        bloodCastle: updated.bloodCastleTicket,
-        devilSquare: updated.devilSquareTicket,
+        bloodCastle: updatedUser.bloodCastleTicket,
+        devilSquare: updatedUser.devilSquareTicket,
       },
       entries: {
-        bloodCastle: updated.bloodCastleEntriesToday,
-        devilSquare: updated.devilSquareEntriesToday,
+        bloodCastle: updatedCharacter.bloodCastleEntriesToday,
+        devilSquare: updatedCharacter.devilSquareEntriesToday,
       },
       maxEntries: MAX_DAILY_ENTRIES,
     });
@@ -133,19 +155,28 @@ export async function GET(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
+    // Get user's tickets (account-wide)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        bloodCastleTicket: true,
+        devilSquareTicket: true,
+      },
+    });
+
     const now = new Date();
     const lastReset = character.lastEventResetDate;
     const needsReset = !lastReset || !isSameDay(lastReset, now);
 
-    // If it's a new day, entries should show as 0
+    // If it's a new day, entries should show as 0 (per character)
     const bloodCastleEntries = needsReset ? 0 : character.bloodCastleEntriesToday;
     const devilSquareEntries = needsReset ? 0 : character.devilSquareEntriesToday;
 
     return NextResponse.json({
       success: true,
       tickets: {
-        bloodCastle: character.bloodCastleTicket,
-        devilSquare: character.devilSquareTicket,
+        bloodCastle: user?.bloodCastleTicket ?? 0,
+        devilSquare: user?.devilSquareTicket ?? 0,
       },
       entries: {
         bloodCastle: bloodCastleEntries,
