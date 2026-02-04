@@ -347,6 +347,22 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Pendant of Wind': '/images/items/13/26.webp',
   'Pendant of Water': '/images/items/13/27.webp',
   'Pendant of Ability': '/images/items/13/28.webp',
+
+  // ==================== Category 14 - Chaos Items (crafting materials) ====================
+  'Chaos Axe': '/images/items/14/axe.webp',
+  'Chaos Bow': '/images/items/14/bow.webp',
+  'Chaos Staff': '/images/items/14/staff.webp',
+
+  // ==================== Category 15 - Wings Level 1 ====================
+  'Wings of Elf': '/images/items/15/0.webp',
+  'Wings of Heaven': '/images/items/15/1.webp',
+  'Wings of Satan': '/images/items/15/2.webp',
+
+  // ==================== Category 16 - Wings Level 2 ====================
+  'Wings of Spirits': '/images/items/15/3.webp',
+  'Wings of Soul': '/images/items/15/4.webp',
+  'Wings of Dragon': '/images/items/15/5.webp',
+  'Wings of Darkness': '/images/items/15/6.webp',
 };
 
 export function getItemImagePath(itemName: string): string | null {

@@ -20,7 +20,7 @@ interface HuntingPanelProps {
   onHpChange: (newHp: number) => void;
   onExpGain: (exp: bigint, zen: bigint) => void;
   onItemDrop: (monsterLevel: number) => void;
-  onJewelDrop: (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye') => void;
+  onJewelDrop: (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye' | 'feather') => void;
   onDeath: () => void;
   onMonsterKill: () => void;
 }
@@ -277,6 +277,14 @@ export default function HuntingPanel({
         }
       }
 
+      // Feather drop - very rare (0.1%), only from monsters level 81+
+      if (currentMonster.level >= 81) {
+        if (Math.random() < 0.001) {
+          onJewelDrop('feather');
+          addLog('🪶 Feather dropped!', 'item');
+        }
+      }
+
       onExpGain(BigInt(expGain), BigInt(zenGain));
 
       // Spawn new monster
@@ -422,34 +430,27 @@ export default function HuntingPanel({
             {/* Menu */}
             <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden max-h-80 overflow-y-auto">
               {LOCATIONS.map((loc, index) => {
-                const isLocked = characterLevel < loc.levelRange[0];
                 const isSelected = selectedLocation === index;
                 return (
                   <button
                     key={loc.id}
                     onClick={() => {
-                      if (!isLocked) {
-                        setSelectedLocation(index);
-                        setLocationDropdownOpen(false);
-                      }
+                      setSelectedLocation(index);
+                      setLocationDropdownOpen(false);
                     }}
-                    disabled={isLocked}
                     className={`w-full px-4 py-3 text-left flex items-center gap-3 transition-colors ${
-                      isLocked
-                        ? 'opacity-40 cursor-not-allowed bg-gray-900/50'
-                        : isSelected
+                      isSelected
                         ? 'bg-yellow-500/20 border-l-2 border-yellow-500'
                         : 'hover:bg-gray-700/50'
                     }`}
                   >
-                    <span className="text-xl">{isLocked ? '🔒' : '🗺️'}</span>
+                    <span className="text-xl">🗺️</span>
                     <div className="flex-1">
-                      <div className={`font-medium ${isSelected ? 'text-yellow-400' : isLocked ? 'text-gray-500' : 'text-white'}`}>
+                      <div className={`font-medium ${isSelected ? 'text-yellow-400' : 'text-white'}`}>
                         {loc.name}
                       </div>
                       <div className="text-xs text-gray-400">
-                        Level {loc.levelRange[0]}-{loc.levelRange[1]}
-                        {isLocked && <span className="ml-2 text-red-400">Requires Lv.{loc.levelRange[0]}</span>}
+                        Monsters Lv.{loc.levelRange[0]}-{loc.levelRange[1]}
                       </div>
                     </div>
                     {isSelected && (

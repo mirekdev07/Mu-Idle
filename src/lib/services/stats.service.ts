@@ -4,11 +4,10 @@ import prisma from '@/lib/prisma';
 export interface CharacterForStats {
   id: number;
   level: number;
-  damage: number;
-  defense: number;
-  vitality: number;
-  blockStat: number;
-  attackSpeedStat: number;
+  damage: number;      // DMG stat level
+  defense: number;     // DEF stat level
+  vitality: number;    // HP stat level
+  speedStat: number;   // Speed stat level
 }
 
 export interface CalculatedStats {
@@ -34,6 +33,36 @@ export interface CalculatedStats {
     final: number;
     bonusPercent: number;
   };
+}
+
+// Calculate upgrade cost for a stat
+export function calculateUpgradeCost(currentLevel: number, amount: number = 1): bigint {
+  const BASE_COST = 100n;
+  let totalCost = 0n;
+
+  for (let i = 0; i < amount; i++) {
+    const level = currentLevel + i;
+    // Cost formula: 100 * level^1.5
+    const cost = BASE_COST * BigInt(Math.floor(Math.pow(level, 1.5)));
+    totalCost += cost;
+  }
+
+  return totalCost;
+}
+
+// Calculate max upgrades affordable with given zen
+export function calculateMaxUpgrades(currentLevel: number, availableZen: bigint): number {
+  let upgrades = 0;
+  let totalCost = 0n;
+
+  while (upgrades < 10000) { // Safety limit
+    const nextCost = calculateUpgradeCost(currentLevel + upgrades, 1);
+    if (totalCost + nextCost > availableZen) break;
+    totalCost += nextCost;
+    upgrades++;
+  }
+
+  return upgrades;
 }
 
 export async function getEquipmentBonuses(characterId: number): Promise<EquipmentBonuses> {
@@ -117,65 +146,60 @@ export function calculateStats(
   character: CharacterForStats,
   bonuses: EquipmentBonuses
 ): CalculatedStats {
-  // Min Damage: 110% of damage stat + equipment bonus
-  let minDamage = Math.floor(character.damage * 1.1) + bonuses.damage_min;
+  // DMG stat: each level adds 2 min damage and 3 max damage
+  let minDamage = character.damage * 2 + bonuses.damage_min;
+  let maxDamage = character.damage * 3 + bonuses.damage_max;
   if (bonuses.damage_percent > 0) {
     minDamage = Math.floor(minDamage * (1 + bonuses.damage_percent / 100));
-  }
-
-  // Max Damage: 160% of damage stat + equipment bonus
-  let maxDamage = Math.floor(character.damage * 1.6) + bonuses.damage_max;
-  if (bonuses.damage_percent > 0) {
     maxDamage = Math.floor(maxDamage * (1 + bonuses.damage_percent / 100));
   }
 
-  // Physical Defense: defense stat * 0.5 + equipment bonus
-  let physicalDefense = Math.floor(character.defense * 0.5) + bonuses.defense;
+  // DEF stat: each level adds 1 defense
+  let physicalDefense = character.defense + bonuses.defense;
   if (bonuses.defense_percent > 0) {
     physicalDefense = Math.floor(physicalDefense * (1 + bonuses.defense_percent / 100));
   }
 
-  // Attack Rate: (level * 3) + (damage * 0.5)
+  // Attack Rate: based on level and damage stat
   const attackRate = Math.floor(character.level * 3 + character.damage * 0.5);
 
-  // Attack Speed: attack_speed_stat * 0.1 + agility * 0.15 + equipment bonus (max 200)
-  let attackSpeed = Math.floor(character.attackSpeedStat * 0.1 + character.defense * 0.15) + bonuses.attack_speed;
+  // Speed stat: each level adds 1 attack speed (max 200)
+  let attackSpeed = character.speedStat + bonuses.attack_speed;
   if (bonuses.attack_speed_percent > 0) {
     attackSpeed = Math.floor(attackSpeed * (1 + bonuses.attack_speed_percent / 100));
   }
   attackSpeed = Math.min(200, attackSpeed);
 
-  // Defense Rate: (level * 2) + (defense * 0.3)
+  // Defense Rate: based on level and defense stat
   const defenseRate = Math.floor(character.level * 2 + character.defense * 0.3);
 
-  // Block Rate: block stat * 0.12
-  const blockRate = Math.floor(character.blockStat * 0.12);
+  // Block Rate: fixed low value (no block stat anymore)
+  const blockRate = 5;
 
-  // Max HP: base 100 + (vitality * 5) + (level * 3)
-  let maxHp = Math.floor(100 + character.vitality * 5 + character.level * 3);
+  // HP stat: base 50 + each level adds 10 HP
+  let maxHp = 50 + character.vitality * 10;
   if (bonuses.max_hp > 0) {
     maxHp = Math.floor(maxHp * (1 + bonuses.max_hp / 100));
   }
 
-  // Max Mana: base 50 + (vitality * 8) + (level * 15)
-  const maxMana = Math.floor(50 + character.vitality * 8 + character.level * 15);
+  // Max Mana: based on vitality and level
+  const maxMana = Math.floor(50 + character.vitality * 5 + character.level * 10);
 
-  // Critical Rate: base 1% + level/40 + damage/200, max 25%
-  const baseCritRate = Math.floor(Math.min(25, 1 + character.level / 40 + character.damage / 200));
+  // Critical Rate: base 5% + level bonus, max 25%
+  const baseCritRate = Math.floor(Math.min(25, 5 + character.level / 50));
   const criticalRate = Math.min(25, baseCritRate + bonuses.critical_rate);
 
-  // Critical Damage: base 130% + (damage * 0.10) + equipment bonus
-  const criticalDamage = Math.floor(130 + character.damage * 0.1) + bonuses.critical_damage;
+  // Critical Damage: base 150% + equipment bonus
+  const criticalDamage = 150 + bonuses.critical_damage;
 
-  // Movement Speed: 100 + (vitality * 0.3) - (defense * 0.1)
-  const movementSpeed = Math.floor(100 + character.vitality * 0.3 - character.defense * 0.1);
+  // Movement Speed: fixed
+  const movementSpeed = 100;
 
-  // Shield Defense: (level * 30) + (defense * 2)
+  // Shield Defense: based on level and defense
   const sd = Math.floor(character.level * 30 + character.defense * 2);
 
-  // HP Recovery: Base 3 + (vitality / 8) + (level / 15)
-  const levelBonus = Math.floor(character.level / 15);
-  const baseHpRecovery = Math.floor(3 + character.vitality / 8 + levelBonus);
+  // HP Recovery: base 5 + vitality bonus
+  const baseHpRecovery = Math.floor(5 + character.vitality / 5);
   let finalHpRecovery = baseHpRecovery;
   if (bonuses.hp_recovery > 0) {
     finalHpRecovery = Math.floor(baseHpRecovery * (1 + bonuses.hp_recovery / 100));

@@ -39,6 +39,7 @@ export async function getInventory(characterId: number): Promise<(Item | null)[]
         enhancementLevel: item.enhancementLevel,
         options: parseOptions(item.itemOptions),
         emoji: item.itemEmoji ?? '📦',
+        slotIndex: item.slotIndex,
       };
     }
   }

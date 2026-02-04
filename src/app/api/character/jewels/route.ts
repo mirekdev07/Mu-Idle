@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { jewel_type, amount = 1 } = body;
 
-    const validTypes = ['bless', 'soul', 'life', 'chaos', 'archangel', 'bloodbone', 'devilskey', 'devilseye'];
+    const validTypes = ['bless', 'soul', 'life', 'chaos', 'archangel', 'bloodbone', 'devilskey', 'devilseye', 'feather'];
     if (!jewel_type || !validTypes.includes(jewel_type)) {
       return errorResponse('Invalid jewel type');
     }
@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       bloodbone: 'bloodBone',
       devilskey: 'devilsKey',
       devilseye: 'devilsEye',
+      feather: 'feather',
     };
 
     const field = fieldMap[jewel_type];
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
         bloodBone: true,
         devilsKey: true,
         devilsEye: true,
+        feather: true,
       },
     });
 
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
         bloodbone: updated.bloodBone,
         devilskey: updated.devilsKey,
         devilseye: updated.devilsEye,
+        feather: updated.feather,
       },
     });
   } catch (error) {

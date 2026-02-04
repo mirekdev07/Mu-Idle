@@ -144,6 +144,7 @@ export const useGameStore = create<GameState & GameActions>()(
           boots: 6,
           ring: 7,
           pendant: 8,
+          wings: 9,
         };
 
         try {

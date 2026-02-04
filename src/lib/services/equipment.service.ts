@@ -3,7 +3,7 @@ import { Equipment, Item, ItemOption, ItemRarity, EquipmentSlotKey } from '@/typ
 import { getEquipmentBonuses } from './stats.service';
 import { getEmptySlot } from './inventory.service';
 
-const SLOT_NAMES: EquipmentSlotKey[] = ['weapon', 'shield', 'helm', 'armor', 'pants', 'gloves', 'boots', 'ring', 'pendant'];
+const SLOT_NAMES: EquipmentSlotKey[] = ['weapon', 'shield', 'helm', 'armor', 'pants', 'gloves', 'boots', 'ring', 'pendant', 'wings'];
 
 // Map category to equipment slot
 function getEquipmentSlotFromCategory(category: number): number | null {
@@ -16,13 +16,16 @@ function getEquipmentSlotFromCategory(category: number): number | null {
   if (category === 11) return 6; // Boots
   if (category === 12) return 7; // Ring
   if (category === 13) return 8; // Pendant
+  // Category 14 (Chaos Items) cannot be equipped - they are crafting materials only
+  if (category === 15) return 9; // Wings Level 1
+  if (category === 16) return 9; // Wings Level 2
   return null;
 }
 
 // Map equipment slot to category (for unequip)
 function getCategoryFromSlot(slot: number): number {
   const categoryMap: Record<number, number> = {
-    0: 0, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12, 8: 13,
+    0: 0, 1: 6, 2: 7, 3: 8, 4: 9, 5: 10, 6: 11, 7: 12, 8: 13, 9: 15,
   };
   return categoryMap[slot] ?? 0;
 }

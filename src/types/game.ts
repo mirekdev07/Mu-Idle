@@ -23,6 +23,7 @@ export interface Item {
   options?: ItemOption[];
   emoji: string;
   image_path?: string;
+  slotIndex?: number;   // inventory slot index (0-23)
 }
 
 export interface InventorySlot {
@@ -42,6 +43,7 @@ export interface Equipment {
   boots?: Item;       // slot 6
   ring?: Item;        // slot 7
   pendant?: Item;     // slot 8
+  wings?: Item;       // slot 9
 }
 
 export type EquipmentSlotKey = keyof Equipment;
@@ -63,6 +65,7 @@ export const EQUIPMENT_SLOTS: EquipmentSlotDef[] = [
   { key: 'boots', name: 'Boots', icon: '🥾', categories: [11] },
   { key: 'ring', name: 'Ring', icon: '💍', categories: [12] },
   { key: 'pendant', name: 'Pendant', icon: '📿', categories: [13] },
+  { key: 'wings', name: 'Wings', icon: '🪽', categories: [15, 16] },
 ];
 
 // ==================== CHARACTER TYPES ====================
@@ -72,8 +75,7 @@ export interface CharacterStats {
   damage_max: number;
   attack_speed: number;
   defense: number;
-  vitality: number;
-  block: number;
+  max_hp: number;
   level: number;
 }
 
@@ -129,12 +131,11 @@ export interface Character {
   zen: bigint;
   totalPlaytime: number;
   monstersKilled: number;
-  damage: number;
-  defense: number;
-  vitality: number;
-  blockStat: number;
-  attackSpeedStat: number;
-  levelupPoints: number;
+  // Stat levels (idle upgrade system)
+  damage: number;      // DMG stat level
+  defense: number;     // DEF stat level
+  vitality: number;    // HP stat level
+  speedStat: number;   // Speed stat level
   currentHp: number | null;
   resetCount: number;
 }

@@ -13,6 +13,7 @@ interface ItemModalProps {
   onUnequip?: () => void;
   onCraft?: () => void;
   onDestroy?: () => void;
+  onDeposit?: () => void;
   onClose: () => void;
 }
 
@@ -123,6 +124,7 @@ export default function ItemModal({
   onUnequip,
   onCraft,
   onDestroy,
+  onDeposit,
   onClose,
 }: ItemModalProps) {
   const rarity = item.rarity || 'common';
@@ -249,6 +251,15 @@ export default function ItemModal({
             <div className="text-center text-xs text-gray-500 py-2">
               Accessories cannot be crafted
             </div>
+          )}
+
+          {!isEquipped && onDeposit && (
+            <button
+              onClick={onDeposit}
+              className="w-full py-3 bg-amber-600 hover:bg-amber-500 rounded-lg font-bold text-white transition-colors"
+            >
+              Vault →
+            </button>
           )}
 
           {!isEquipped && (

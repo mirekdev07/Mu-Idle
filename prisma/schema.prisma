@@ -31,6 +31,7 @@ model User {
   bloodBone              Int      @default(0) @map("blood_bone")
   devilsKey              Int      @default(0) @map("devils_key")
   devilsEye              Int      @default(0) @map("devils_eye")
+  feather                Int      @default(0) @map("feather")
 
   // Event tickets (shared across all characters)
   bloodCastleTicket      Int      @default(0) @map("blood_castle_ticket")
@@ -58,13 +59,11 @@ model PlayerCharacter {
   createdAt      DateTime @default(now()) @map("created_at")
   lastPlayed     DateTime @default(now()) @map("last_played")
 
-  // Character stats (simplified - all start at 25)
-  damage         Int @default(25)
-  defense        Int @default(25)
-  vitality       Int @default(25)
-  blockStat      Int @default(25) @map("block_stat")
-  attackSpeedStat Int @default(25) @map("attack_speed_stat")
-  levelupPoints  Int @default(0) @map("levelup_points")
+  // Character stats (idle upgrades - start at 1)
+  damage         Int @default(1)  // DMG stat
+  defense        Int @default(1)  // DEF stat
+  vitality       Int @default(1)  // HP stat
+  speedStat      Int @default(1) @map("speed_stat")  // Speed stat
 
   // HP system
   currentHp Int? @map("current_hp")
@@ -186,4 +185,32 @@ model GameStatistic {
   @@unique([characterId, statName])
   @@index([characterId])
   @@map("game_statistics")
+}
+
+model PlayerVault {
+  id              Int      @id @default(autoincrement())
+  characterId     Int      @map("character_id")
+  slotIndex       Int      @map("slot_index") // 0-99 (100 slots)
+  itemName        String?  @map("item_name") @db.VarChar(100)
+  itemType        String?  @map("item_type") @db.VarChar(50)
+  itemEmoji       String?  @map("item_emoji") @db.VarChar(10)
+  itemRarity      String?  @default("common") @map("item_rarity") @db.VarChar(20)
+
+  // Item stats
+  damageMin       Int @default(0) @map("damage_min")
+  damageMax       Int @default(0) @map("damage_max")
+  attackSpeed     Int @default(0) @map("attack_speed")
+  defenseValue    Int @default(0) @map("defense")
+  itemLevel       Int @default(1) @map("item_level")
+  category        Int @default(0)
+
+  // Enhancement system
+  enhancementLevel Int     @default(0) @map("enhancement_level")
+  itemOptions      String? @map("item_options") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([characterId, slotIndex])
+  @@index([characterId])
+  @@map("player_vault")
 }

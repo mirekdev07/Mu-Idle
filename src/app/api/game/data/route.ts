@@ -3,7 +3,7 @@ import { getCurrentUserId, unauthorizedResponse, errorResponse } from '@/lib/aut
 import { getCharacterById, getLatestCharacter } from '@/lib/services/character.service';
 import { getInventory } from '@/lib/services/inventory.service';
 import { getEquipment, getEquipmentBonuses } from '@/lib/services/equipment.service';
-import { calculateStats } from '@/lib/services/stats.service';
+import { calculateStats, calculateUpgradeCost } from '@/lib/services/stats.service';
 import prisma from '@/lib/prisma';
 
 // Offline rewards constants
@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
           bloodBone: true,
           devilsKey: true,
           devilsEye: true,
+          feather: true,
           bloodCastleTicket: true,
           devilSquareTicket: true,
         },
@@ -65,8 +66,7 @@ export async function GET(request: NextRequest) {
         damage: character.damage,
         defense: character.defense,
         vitality: character.vitality,
-        blockStat: character.blockStat,
-        attackSpeedStat: character.attackSpeedStat,
+        speedStat: character.speedStat,
       },
       bonuses
     );
@@ -107,12 +107,10 @@ export async function GET(request: NextRequest) {
         // Calculate level ups (max level 400)
         const MAX_LEVEL = 400;
         let newLevel = character.level;
-        let newPoints = character.levelupPoints;
 
         while (newExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
           newExp -= BigInt(newLevel * 100);
           newLevel++;
-          newPoints += 5;
         }
 
         // Cap exp at 0 if max level
@@ -127,7 +125,6 @@ export async function GET(request: NextRequest) {
             experience: newExp,
             zen: newZen,
             level: newLevel,
-            levelupPoints: newPoints,
             lastHeartbeat: now,
           },
         });
@@ -136,7 +133,6 @@ export async function GET(request: NextRequest) {
         character.experience = newExp;
         character.zen = newZen;
         character.level = newLevel;
-        character.levelupPoints = newPoints;
 
         offlineRewards = {
           exp: safeOfflineExp,
@@ -145,6 +141,14 @@ export async function GET(request: NextRequest) {
         };
       }
     }
+
+    // Calculate upgrade costs
+    const upgradeCosts = {
+      dmg: calculateUpgradeCost(character.damage, 1).toString(),
+      def: calculateUpgradeCost(character.defense, 1).toString(),
+      speed: calculateUpgradeCost(character.speedStat, 1).toString(),
+      hp: calculateUpgradeCost(character.vitality, 1).toString(),
+    };
 
     return NextResponse.json({
       success: true,
@@ -155,12 +159,12 @@ export async function GET(request: NextRequest) {
         level: character.level,
         experience: character.experience.toString(),
         zen: character.zen.toString(),
-        damage: character.damage,
-        defense: character.defense,
-        vitality: character.vitality,
-        blockStat: character.blockStat,
-        attackSpeedStat: character.attackSpeedStat,
-        levelupPoints: character.levelupPoints,
+        // Stat levels for upgrades
+        dmgLevel: character.damage,
+        defLevel: character.defense,
+        speedLevel: character.speedStat,
+        hpLevel: character.vitality,
+        // Other
         currentHp: character.currentHp,
         resetCount: character.resetCount,
         monstersKilled: character.monstersKilled,
@@ -175,6 +179,7 @@ export async function GET(request: NextRequest) {
         bloodBone: user?.bloodBone ?? 0,
         devilsKey: user?.devilsKey ?? 0,
         devilsEye: user?.devilsEye ?? 0,
+        feather: user?.feather ?? 0,
         bloodCastleTicket: user?.bloodCastleTicket ?? 0,
         devilSquareTicket: user?.devilSquareTicket ?? 0,
         // Daily entries per character
@@ -185,6 +190,7 @@ export async function GET(request: NextRequest) {
       equipment,
       bonuses,
       stats: calculatedStats,
+      upgradeCosts,
       offlineRewards,
     });
   } catch (error) {

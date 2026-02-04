@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
     let jewelField: 'jewelOfBless' | 'jewelOfSoul' | 'jewelOfLife';
     let updateData: Record<string, unknown> = {};
 
-    // Check if item is a weapon (category 0-5) or armor (6-11)
-    const isWeapon = inventoryItem.category >= 0 && inventoryItem.category <= 5;
+    // Check if item is a weapon (category 0-5) or Chaos Item (category 14) - these get +Damage
+    const isWeapon = (inventoryItem.category >= 0 && inventoryItem.category <= 5) || inventoryItem.category === 14;
 
     if (action === 'bless') {
       jewelField = 'jewelOfBless';
@@ -262,12 +262,12 @@ export async function POST(request: NextRequest) {
 
         if (existingOption) {
           existingOption.value = newBonus;
-          existingOption.display = `+${newBonus} ${statName} (Craft)`;
+          existingOption.display = `+${newBonus} ${statName} (Life)`;
         } else {
           options.push({
             type: optionType,
             value: newBonus,
-            display: `+${newBonus} ${statName} (Craft)`,
+            display: `+${newBonus} ${statName} (Life)`,
           });
         }
 

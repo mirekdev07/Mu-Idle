@@ -13,6 +13,7 @@ interface InventorySlotProps {
   onEquip?: (item: Item, slotIndex: number) => void;
   onDestroy?: (slotIndex: number) => void;
   onCraft?: (item: Item, slotIndex: number) => void;
+  onDeposit?: (slotIndex: number) => void;
 }
 
 const RARITY_BORDERS: Record<string, string> = {
@@ -145,6 +146,7 @@ export default function InventorySlot({
   onEquip,
   onDestroy,
   onCraft,
+  onDeposit,
 }: InventorySlotProps) {
   const [showModal, setShowModal] = useState(false);
 
@@ -171,6 +173,13 @@ export default function InventorySlot({
   const handleCraft = () => {
     if (item && onCraft) {
       onCraft(item, slotIndex);
+    }
+    setShowModal(false);
+  };
+
+  const handleDeposit = () => {
+    if (onDeposit) {
+      onDeposit(slotIndex);
     }
     setShowModal(false);
   };
@@ -228,6 +237,7 @@ export default function InventorySlot({
           onEquip={handleEquip}
           onCraft={onCraft ? handleCraft : undefined}
           onDestroy={handleDestroy}
+          onDeposit={onDeposit ? handleDeposit : undefined}
           onClose={() => setShowModal(false)}
         />
       )}

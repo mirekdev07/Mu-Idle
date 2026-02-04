@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       experience,
       zen,
       level,
-      levelup_points,
       monsters_killed,
       deaths,
       exp_per_second,
@@ -42,14 +41,12 @@ export async function POST(request: NextRequest) {
     const MAX_LEVEL = 400;
     let newExp = experience !== undefined ? BigInt(experience) : character.experience;
     let newLevel = level !== undefined ? level : character.level;
-    let newPoints = levelup_points !== undefined ? levelup_points : character.levelupPoints;
 
-    // Auto level up calculation
+    // Auto level up calculation (no points in new system)
     if (experience !== undefined) {
       while (newExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
         newExp -= BigInt(newLevel * 100);
         newLevel++;
-        newPoints += 5;
       }
       // Cap exp at 0 if max level
       if (newLevel >= MAX_LEVEL) {
@@ -59,7 +56,6 @@ export async function POST(request: NextRequest) {
 
     updateData.experience = newExp;
     updateData.level = newLevel;
-    updateData.levelupPoints = newPoints;
 
     if (zen !== undefined) {
       updateData.zen = BigInt(zen);
@@ -98,7 +94,6 @@ export async function POST(request: NextRequest) {
         zen: updatedCharacter.zen.toString(),
         monstersKilled: updatedCharacter.monstersKilled,
         deaths: updatedCharacter.deaths,
-        levelupPoints: updatedCharacter.levelupPoints,
       },
     });
   } catch (error) {

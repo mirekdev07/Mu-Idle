@@ -89,6 +89,10 @@ export async function getRandomItemDrop(monsterLevel: number): Promise<DroppedIt
         gte: minLevel,
         lte: maxLevel,
       },
+      // Exclude Chaos Items (14) and Wings (15+) - these are crafting-only
+      category: {
+        lt: 14,
+      },
     },
   });
 

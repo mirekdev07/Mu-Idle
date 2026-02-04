@@ -21,6 +21,7 @@ const SLOT_CONFIG: { key: EquipmentSlotKey; label: string; emoji: string }[] = [
   { key: 'boots', label: 'Boots', emoji: '🥾' },
   { key: 'ring', label: 'Ring', emoji: '💍' },
   { key: 'pendant', label: 'Pendant', emoji: '📿' },
+  { key: 'wings', label: 'Wings', emoji: '🪽' },
 ];
 
 const RARITY_BORDERS: Record<string, string> = {

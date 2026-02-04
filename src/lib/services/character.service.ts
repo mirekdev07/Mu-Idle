@@ -48,12 +48,11 @@ export async function createCharacter(data: CreateCharacterData) {
       level: 1,
       experience: 0n,
       zen: 0n,
-      damage: 25,
-      defense: 25,
-      vitality: 25,
-      blockStat: 25,
-      attackSpeedStat: 25,
-      levelupPoints: 0,
+      // All stats start at 1
+      damage: 1,
+      defense: 1,
+      vitality: 1,
+      speedStat: 1,
       currentHp: null, // Will be calculated on first load
     },
   });
@@ -78,40 +77,6 @@ export async function updateCharacterProgress(
   });
 }
 
-export async function addStatPoint(
-  characterId: number,
-  statName: 'damage' | 'defense' | 'vitality' | 'blockStat' | 'attackSpeedStat',
-  amount: number = 1
-): Promise<{ success: boolean; message?: string; newValue?: number }> {
-  const character = await prisma.playerCharacter.findUnique({
-    where: { id: characterId },
-  });
-
-  if (!character) {
-    return { success: false, message: 'Character not found' };
-  }
-
-  // Limit amount to available points
-  const pointsToAdd = Math.min(amount, character.levelupPoints);
-
-  if (pointsToAdd < 1) {
-    return { success: false, message: 'No stat points available' };
-  }
-
-  const updatedCharacter = await prisma.playerCharacter.update({
-    where: { id: characterId },
-    data: {
-      [statName]: { increment: pointsToAdd },
-      levelupPoints: { decrement: pointsToAdd },
-    },
-  });
-
-  return {
-    success: true,
-    newValue: updatedCharacter[statName],
-  };
-}
-
 export async function updateCurrentHp(characterId: number, hp: number) {
   return prisma.playerCharacter.update({
     where: { id: characterId },
@@ -134,22 +99,12 @@ export async function resetCharacter(
     return { success: false, message: 'Character must be level 400+ to reset' };
   }
 
-  // Bonus points scale with reset count: 500 * resetNumber
-  // resetCount is 0-indexed, so next reset will be resetCount + 1
-  const nextResetNumber = character.resetCount + 1;
-  const bonusPoints = 500 * nextResetNumber;
-
   await prisma.playerCharacter.update({
     where: { id: characterId },
     data: {
       level: 1,
       experience: 0n,
-      damage: 25,
-      defense: 25,
-      vitality: 25,
-      blockStat: 25,
-      attackSpeedStat: 25,
-      levelupPoints: bonusPoints,
+      // Stats are NOT reset - they are purchased with zen
       resetCount: { increment: 1 },
       currentHp: null,
       // Reset heartbeat and rates to prevent offline rewards after reset
@@ -192,21 +147,19 @@ export function calculateLevelUp(
   currentLevel: number,
   currentExp: bigint,
   maxLevel: number = 400
-): { newLevel: number; remainingExp: bigint; pointsGained: number } {
+): { newLevel: number; remainingExp: bigint } {
   let level = currentLevel;
   let exp = currentExp;
-  let pointsGained = 0;
 
   while (level < maxLevel) {
     const expNeeded = getExpForLevel(level);
     if (exp >= expNeeded) {
       exp -= expNeeded;
       level++;
-      pointsGained += 5; // 5 stat points per level
     } else {
       break;
     }
   }
 
-  return { newLevel: level, remainingExp: exp, pointsGained };
+  return { newLevel: level, remainingExp: exp };
 }

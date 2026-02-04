@@ -20,12 +20,11 @@ interface CharacterData {
   level: number;
   experience: string;
   zen: string;
-  damage: number;
-  defense: number;
-  vitality: number;
-  blockStat: number;
-  attackSpeedStat: number;
-  levelupPoints: number;
+  // Stat levels (for upgrades)
+  dmgLevel: number;
+  defLevel: number;
+  speedLevel: number;
+  hpLevel: number;
   currentHp: number | null;
   resetCount: number;
   monstersKilled: number;
@@ -38,10 +37,18 @@ interface CharacterData {
   bloodBone: number;
   devilsKey: number;
   devilsEye: number;
+  feather: number;
   bloodCastleTicket: number;
   devilSquareTicket: number;
   bloodCastleEntriesToday: number;
   devilSquareEntriesToday: number;
+}
+
+interface UpgradeCosts {
+  dmg: string;
+  def: string;
+  speed: string;
+  hp: string;
 }
 
 interface GameStats {
@@ -70,6 +77,8 @@ export default function HomePage() {
   const [lastExpUpdate, setLastExpUpdate] = useState<{ exp: bigint; zen: bigint; time: number } | null>(null);
   const [offlineRewards, setOfflineRewards] = useState<{ exp: number; zen: number; seconds: number } | null>(null);
   const [craftingItem, setCraftingItem] = useState<{ item: Item; slotIndex: number } | null>(null);
+  const [upgradeCosts, setUpgradeCosts] = useState<UpgradeCosts>({ dmg: '0', def: '0', speed: '0', hp: '0' });
+  const [upgradeMultiplier, setUpgradeMultiplier] = useState<1 | 5 | 10 | 100 | 'max'>(1);
 
   const {
     inventory,
@@ -113,6 +122,10 @@ export default function HomePage() {
         setCurrentHp(data.character.currentHp ?? data.stats.maxHp);
         setLocalMonstersKilled(data.character.monstersKilled || 0);
         setLocalDeaths(data.character.deaths || 0);
+        // Set upgrade costs
+        if (data.upgradeCosts) {
+          setUpgradeCosts(data.upgradeCosts);
+        }
         // Load inventory and equipment
         await loadAllData(data.character.id);
         // Show offline rewards modal if any
@@ -157,7 +170,6 @@ export default function HomePage() {
             experience: gameData.character.experience,
             zen: gameData.character.zen,
             level: gameData.character.level,
-            levelup_points: gameData.character.levelupPoints,
             monsters_killed: localMonstersKilled,
             deaths: localDeaths,
             exp_per_second: expPerSecond,
@@ -246,13 +258,11 @@ export default function HomePage() {
     const MAX_LEVEL = 400;
     let newLevel = gameData.character.level;
     let remainingExp = newExp;
-    let newPoints = gameData.character.levelupPoints;
     let leveledUp = false;
 
     while (remainingExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
       remainingExp -= BigInt(newLevel * 100);
       newLevel++;
-      newPoints += 5; // 5 points per level
       leveledUp = true;
     }
 
@@ -261,40 +271,21 @@ export default function HomePage() {
       remainingExp = 0n;
     }
 
-    let newCharacterData = {
+    const newCharacterData = {
       ...gameData.character,
       experience: remainingExp.toString(),
       zen: newZen.toString(),
       level: newLevel,
-      levelupPoints: newPoints,
     };
-
-    // Calculate new maxHp for new level (same formula as stats.service.ts)
-    // HP = 100 + (vitality * 5) + (level * 3), then apply equipment bonus
-    let newMaxHp = gameData.stats.maxHp;
-    if (leveledUp) {
-      let baseHp = Math.floor(100 + gameData.character.vitality * 5 + newLevel * 3);
-      if (equipmentBonuses.max_hp > 0) {
-        baseHp = Math.floor(baseHp * (1 + equipmentBonuses.max_hp / 100));
-      }
-      newMaxHp = baseHp;
-    }
-
-    const newStats = leveledUp
-      ? { ...gameData.stats, maxHp: newMaxHp }
-      : gameData.stats;
 
     // Update state
     setGameData({
       ...gameData,
       character: newCharacterData,
-      stats: newStats,
     });
 
-    // On level up: restore HP to full and save progress
+    // On level up: save progress
     if (leveledUp) {
-      setCurrentHp(newMaxHp);
-
       try {
         await fetch('/api/game/progress', {
           method: 'POST',
@@ -304,7 +295,6 @@ export default function HomePage() {
             experience: remainingExp.toString(),
             zen: newZen.toString(),
             level: newLevel,
-            levelup_points: newPoints,
           }),
         });
       } catch (err) {
@@ -391,6 +381,23 @@ export default function HomePage() {
     }
   };
 
+  const handleDepositItem = async (slotIndex: number) => {
+    if (!gameData) return;
+    try {
+      const response = await fetch('/api/vault/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inventory_slot: slotIndex }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        await loadAllData(gameData.character.id);
+      }
+    } catch (err) {
+      console.error('Deposit error:', err);
+    }
+  };
+
   const handleClearInventory = async () => {
     if (!gameData) return;
     const confirmed = await showConfirm({
@@ -409,7 +416,7 @@ export default function HomePage() {
     setLocalMonstersKilled((prev) => prev + 1);
   };
 
-  const handleJewelDrop = async (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye') => {
+  const handleJewelDrop = async (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye' | 'feather') => {
     if (!gameData) return;
 
     try {
@@ -436,6 +443,7 @@ export default function HomePage() {
             bloodBone: data.materials?.bloodbone ?? gameData.character.bloodBone,
             devilsKey: data.materials?.devilskey ?? gameData.character.devilsKey,
             devilsEye: data.materials?.devilseye ?? gameData.character.devilsEye,
+            feather: data.materials?.feather ?? gameData.character.feather,
           },
         });
       }
@@ -444,8 +452,10 @@ export default function HomePage() {
     }
   };
 
-  const handleAddStat = async (statName: string, amount: number = 1) => {
-    if (!gameData || gameData.character.levelupPoints <= 0) return;
+  const handleUpgradeStat = async (statName: 'dmg' | 'def' | 'speed' | 'hp') => {
+    if (!gameData) return;
+
+    const amount = upgradeMultiplier === 'max' ? 'max' : upgradeMultiplier;
 
     try {
       const response = await fetch('/api/character/stats', {
@@ -460,12 +470,20 @@ export default function HomePage() {
 
       const data = await response.json();
       if (data.success) {
+        // Map stat names to character fields
+        const statFieldMap: Record<string, keyof CharacterData> = {
+          dmg: 'dmgLevel',
+          def: 'defLevel',
+          speed: 'speedLevel',
+          hp: 'hpLevel',
+        };
+
         setGameData({
           ...gameData,
           character: {
             ...gameData.character,
-            [statName]: data.newValue,
-            levelupPoints: data.remainingPoints,
+            [statFieldMap[statName]]: data.newLevel,
+            zen: data.zen,
           },
           stats: {
             ...gameData.stats,
@@ -477,11 +495,16 @@ export default function HomePage() {
             criticalRate: data.stats.criticalRate,
           },
         });
+
+        // Update upgrade costs
+        if (data.upgradeCosts) {
+          setUpgradeCosts(data.upgradeCosts);
+        }
       } else {
-        console.error('Add stat failed:', data.message);
+        console.error('Upgrade stat failed:', data.message);
       }
     } catch (err) {
-      console.error('Add stat failed:', err);
+      console.error('Upgrade stat failed:', err);
     }
   };
 
@@ -489,11 +512,10 @@ export default function HomePage() {
     if (!gameData || gameData.character.level < 400) return;
 
     const nextResetNumber = gameData.character.resetCount + 1;
-    const bonusPoints = 500 * nextResetNumber;
 
     const confirmed = await showConfirm({
       title: 'Reset Character',
-      message: `Reset to level 1 and receive ${bonusPoints.toLocaleString()} bonus stat points? (Reset #${nextResetNumber}) Your Zen, items, and equipment will be kept.`,
+      message: `Reset to level 1? (Reset #${nextResetNumber}) Your Zen, stats, items, and equipment will be kept.`,
       confirmText: 'Reset',
       cancelText: 'Cancel',
       confirmColor: 'yellow',
@@ -515,7 +537,7 @@ export default function HomePage() {
         await loadGameData();
         await showInfo({
           title: 'Reset Complete!',
-          message: `Your character has been reset to level 1. You received ${bonusPoints.toLocaleString()} bonus stat points!`,
+          message: `Your character has been reset to level 1. Your stats and items are preserved!`,
           buttonText: 'Continue',
           color: 'yellow',
         });
@@ -524,57 +546,6 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error('Reset failed:', err);
-    }
-  };
-
-  const handleRebuild = async () => {
-    if (!gameData) return;
-
-    const confirmed = await showConfirm({
-      title: 'Rebuild Stats',
-      message: 'Reset all stats to 25 and get back all spent points? Cost: 1,000,000 Zen',
-      confirmText: 'Rebuild',
-      cancelText: 'Cancel',
-      confirmColor: 'yellow',
-    });
-
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch('/api/character/rebuild', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          character_id: gameData.character.id,
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        // Reload all game data to get fresh stats
-        await loadGameData();
-        await showInfo({
-          title: 'Rebuild Complete!',
-          message: `Your stats have been reset to 25. You received ${data.pointsReturned} stat points to redistribute.`,
-          buttonText: 'Great!',
-          color: 'yellow',
-        });
-      } else {
-        await showInfo({
-          title: 'Rebuild Failed',
-          message: data.message || 'Something went wrong',
-          buttonText: 'OK',
-          color: 'red',
-        });
-      }
-    } catch (err) {
-      console.error('Rebuild failed:', err);
-      await showInfo({
-        title: 'Error',
-        message: 'Failed to rebuild stats. Please try again.',
-        buttonText: 'OK',
-        color: 'red',
-      });
     }
   };
 
@@ -734,6 +705,9 @@ export default function HomePage() {
               <Link href="/chaos-machine" className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm">
                 Chaos Machine
               </Link>
+              <Link href="/vault" className="px-3 py-1 bg-amber-700 rounded hover:bg-amber-600 text-sm">
+                Vault
+              </Link>
               <Link href="/characters" className="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 text-sm">
                 Characters
               </Link>
@@ -802,6 +776,17 @@ export default function HomePage() {
                         <div>
                           <div className="font-medium text-purple-400">Chaos Machine</div>
                           <div className="text-xs text-gray-400">Craft items & tickets</div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/vault"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-amber-700/30 transition-colors"
+                      >
+                        <span className="text-xl">🏦</span>
+                        <div>
+                          <div className="font-medium text-amber-400">Vault</div>
+                          <div className="text-xs text-gray-400">Store your items</div>
                         </div>
                       </Link>
                       <Link
@@ -969,74 +954,63 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Base Stats */}
+            {/* Stat Upgrades */}
             <div className="mt-4 pt-3 border-t border-gray-700">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-semibold text-gray-300 flex items-center gap-1">
-                  Stats
+                  Upgrade Stats
                   <InfoTooltip
                     color="blue"
                     content={
                       <div className="space-y-1">
-                        <div className="font-bold text-yellow-400 mb-1">Stat Formulas:</div>
-                        <div><span className="text-red-400">Strength:</span> +1.1x min dmg, +1.6x max dmg</div>
-                        <div><span className="text-blue-400">Agility:</span> +0.5x defense, +0.15x atk speed</div>
-                        <div><span className="text-green-400">Vitality:</span> +5 HP per point</div>
+                        <div className="font-bold text-yellow-400 mb-1">Stat Bonuses:</div>
+                        <div><span className="text-red-400">DMG:</span> +2 min, +3 max damage per level</div>
+                        <div><span className="text-blue-400">DEF:</span> +1 defense per level</div>
+                        <div><span className="text-cyan-400">Speed:</span> +1 attack speed per level</div>
+                        <div><span className="text-green-400">HP:</span> +10 HP per level</div>
+                        <div className="text-gray-400 mt-1 text-xs">Cost: 100 × level^1.5 zen</div>
                       </div>
                     }
                   />
                 </span>
-                <span className="text-xs text-blue-400">Points: {character.levelupPoints}</span>
               </div>
+              {/* Multiplier Toggle */}
+              <div className="flex gap-1 mb-2">
+                {([1, 5, 10, 100, 'max'] as const).map((mult) => (
+                  <button
+                    key={mult}
+                    onClick={() => setUpgradeMultiplier(mult)}
+                    className={`flex-1 py-1 text-xs font-bold rounded transition-colors ${
+                      upgradeMultiplier === mult
+                        ? 'bg-yellow-500 text-gray-900'
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    }`}
+                  >
+                    {mult === 'max' ? 'MAX' : `x${mult}`}
+                  </button>
+                ))}
+              </div>
+              {/* Stats */}
               {[
-                { key: 'damage', label: 'STR', value: character.damage },
-                { key: 'defense', label: 'AGI', value: character.defense },
-                { key: 'vitality', label: 'VIT', value: character.vitality },
-              ].map(({ key, label, value }) => (
-                <div key={key} className="flex justify-between items-center text-xs mb-1">
-                  <span className="text-gray-400">{label}:</span>
-                  <div className="flex items-center gap-1">
-                    <span className="w-8 text-right">{value}</span>
-                    {character.levelupPoints >= 5 && (
-                      <>
-                        <button
-                          onClick={() => handleAddStat(key, 5)}
-                          className="px-1 h-5 bg-green-600 hover:bg-green-500 rounded text-xs font-bold"
-                        >
-                          +5
-                        </button>
-                        <button
-                          onClick={() => handleAddStat(key, 10)}
-                          disabled={character.levelupPoints < 10}
-                          className="px-1 h-5 bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-xs font-bold"
-                        >
-                          +10
-                        </button>
-                        <button
-                          onClick={() => handleAddStat(key, 50)}
-                          disabled={character.levelupPoints < 50}
-                          className="px-1 h-5 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-xs font-bold"
-                        >
-                          +50
-                        </button>
-                        <button
-                          onClick={() => handleAddStat(key, character.levelupPoints)}
-                          className="px-1 h-5 bg-red-600 hover:bg-red-500 rounded text-xs font-bold"
-                        >
-                          max
-                        </button>
-                      </>
-                    )}
+                { key: 'dmg' as const, label: 'DMG', value: character.dmgLevel, cost: upgradeCosts.dmg, color: 'text-red-400' },
+                { key: 'def' as const, label: 'DEF', value: character.defLevel, cost: upgradeCosts.def, color: 'text-blue-400' },
+                { key: 'speed' as const, label: 'Speed', value: character.speedLevel, cost: upgradeCosts.speed, color: 'text-cyan-400' },
+                { key: 'hp' as const, label: 'HP', value: character.hpLevel, cost: upgradeCosts.hp, color: 'text-green-400' },
+              ].map(({ key, label, value, cost, color }) => (
+                <div key={key} className="flex justify-between items-center text-xs mb-1.5 bg-gray-700/30 rounded px-2 py-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`${color} font-bold w-12`}>{label}</span>
+                    <span className="text-white font-mono">Lv.{value}</span>
                   </div>
+                  <button
+                    onClick={() => handleUpgradeStat(key)}
+                    disabled={BigInt(character.zen) < BigInt(cost)}
+                    className="px-2 py-0.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-xs font-bold transition-colors"
+                  >
+                    {BigInt(cost).toLocaleString()} Zen
+                  </button>
                 </div>
               ))}
-              <button
-                onClick={handleRebuild}
-                disabled={BigInt(character.zen) < 1000000n}
-                className="w-full mt-2 py-1 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-700 disabled:opacity-50 rounded text-xs font-bold"
-              >
-                Rebuild (1M Zen)
-              </button>
               {character.level >= 400 && (
                 <button
                   onClick={handleReset}
@@ -1050,16 +1024,16 @@ export default function HomePage() {
             {/* Combat Stats */}
             <div className="mt-3 pt-3 border-t border-gray-700">
               <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
-                Combat
+                Combat Stats
                 <InfoTooltip
                   color="yellow"
                   content={
                     <div className="space-y-1">
-                      <div className="font-bold text-yellow-400 mb-1">Combat Formulas:</div>
-                      <div><span className="text-red-400">Attack:</span> STR × 1.1-1.6 + weapon</div>
-                      <div><span className="text-blue-400">Defense:</span> AGI × 0.5 + armor</div>
-                      <div><span className="text-cyan-400">Crit Rate:</span> 1% + level/40 + STR/200</div>
-                      <div><span className="text-orange-400">ATK Speed:</span> AGI × 0.15 + weapon</div>
+                      <div className="font-bold text-yellow-400 mb-1">Combat Values:</div>
+                      <div><span className="text-red-400">Attack:</span> DMG level × 2-3 + weapon</div>
+                      <div><span className="text-blue-400">Defense:</span> DEF level + armor</div>
+                      <div><span className="text-cyan-400">ATK Speed:</span> Speed level + weapon (max 200)</div>
+                      <div><span className="text-green-400">Max HP:</span> 50 + HP level × 10</div>
                     </div>
                   }
                 />
@@ -1067,49 +1041,60 @@ export default function HomePage() {
               <div className="grid grid-cols-2 gap-1 text-xs">
                 <div><span className="text-gray-500">Attack:</span><span className="ml-1 text-red-400">{totalStats.minDamage}-{totalStats.maxDamage}</span></div>
                 <div><span className="text-gray-500">Defense:</span><span className="ml-1 text-blue-400">{totalStats.defense}</span></div>
-                <div><span className="text-gray-500">HP:</span><span className="ml-1 text-red-400">{stats.maxHp}</span></div>
-                <div><span className="text-gray-500">Crit:</span><span className="ml-1">{stats.criticalRate}%</span></div>
-                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-orange-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
+                <div><span className="text-gray-500">HP:</span><span className="ml-1 text-green-400">{stats.maxHp}</span></div>
+                <div><span className="text-gray-500">Crit:</span><span className="ml-1 text-yellow-400">{stats.criticalRate}%</span></div>
+                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-cyan-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
               </div>
             </div>
 
             {/* Crafting Materials - Desktop */}
             <div className="mt-3 pt-3 border-t border-gray-700">
               <h3 className="text-xs font-semibold text-gray-400 mb-2">Crafting Materials</h3>
-              <div className="grid grid-cols-4 gap-1 text-xs">
-                <div className="flex flex-col items-center">
-                  <span className="text-purple-300">💎 {character.jewelOfBless}</span>
-                  <span className="text-gray-500 text-[10px]">Bless</span>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-purple-300">💎</span>
+                  <span className="text-purple-300 font-medium">{character.jewelOfBless}</span>
+                  <span className="text-gray-500">Bless</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-pink-400">💎 {character.jewelOfSoul}</span>
-                  <span className="text-gray-500 text-[10px]">Soul</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-pink-400">💎</span>
+                  <span className="text-pink-400 font-medium">{character.jewelOfSoul}</span>
+                  <span className="text-gray-500">Soul</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-orange-400">💎 {character.jewelOfLife}</span>
-                  <span className="text-gray-500 text-[10px]">Life</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-orange-400">💎</span>
+                  <span className="text-orange-400 font-medium">{character.jewelOfLife}</span>
+                  <span className="text-gray-500">Life</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-yellow-400">💎 {character.jewelOfChaos}</span>
-                  <span className="text-gray-500 text-[10px]">Chaos</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-yellow-400">💎</span>
+                  <span className="text-yellow-400 font-medium">{character.jewelOfChaos}</span>
+                  <span className="text-gray-500">Chaos</span>
                 </div>
-              </div>
-              <div className="grid grid-cols-4 gap-1 text-xs mt-2">
-                <div className="flex flex-col items-center">
-                  <span className="text-cyan-400">📜 {character.scrollOfArchangel}</span>
-                  <span className="text-gray-500 text-[10px]">Scroll</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-cyan-400">📜</span>
+                  <span className="text-cyan-400 font-medium">{character.scrollOfArchangel}</span>
+                  <span className="text-gray-500">Scroll</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-red-400">🦴 {character.bloodBone}</span>
-                  <span className="text-gray-500 text-[10px]">Bone</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-red-400">🦴</span>
+                  <span className="text-red-400 font-medium">{character.bloodBone}</span>
+                  <span className="text-gray-500">Bone</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-amber-400">🗝️ {character.devilsKey}</span>
-                  <span className="text-gray-500 text-[10px]">Key</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-amber-400">🗝️</span>
+                  <span className="text-amber-400 font-medium">{character.devilsKey}</span>
+                  <span className="text-gray-500">Key</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-green-400">👁️ {character.devilsEye}</span>
-                  <span className="text-gray-500 text-[10px]">Eye</span>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-green-400">👁️</span>
+                  <span className="text-green-400 font-medium">{character.devilsEye}</span>
+                  <span className="text-gray-500">Eye</span>
+                </div>
+                <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
+                  <span className="text-emerald-400">🪶</span>
+                  <span className="text-emerald-400 font-medium">{character.feather}</span>
+                  <span className="text-gray-500">Feather</span>
                 </div>
               </div>
             </div>
@@ -1178,7 +1163,7 @@ export default function HomePage() {
             </div>
             <div className={`grid ${craftingItem ? 'grid-cols-8' : 'grid-cols-12'} gap-1`}>
               {inventory.map((slot) => (
-                <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} />
+                <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} onDeposit={handleDepositItem} />
               ))}
             </div>
           </div>
@@ -1228,46 +1213,42 @@ export default function HomePage() {
             {/* Crafting Materials - Mobile */}
             <div className="mt-3 bg-gray-800/50 rounded-lg p-3 border border-gray-700">
               <h3 className="text-sm font-semibold text-yellow-400 mb-2">Crafting Materials</h3>
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-purple-300">💎</div>
-                  <div className="text-purple-300 font-bold">{character.jewelOfBless}</div>
+                  <div className="text-purple-300">💎 <span className="font-bold">{character.jewelOfBless}</span></div>
                   <div className="text-gray-500 text-[10px]">Bless</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-pink-400">💎</div>
-                  <div className="text-pink-400 font-bold">{character.jewelOfSoul}</div>
+                  <div className="text-pink-400">💎 <span className="font-bold">{character.jewelOfSoul}</span></div>
                   <div className="text-gray-500 text-[10px]">Soul</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-orange-400">💎</div>
-                  <div className="text-orange-400 font-bold">{character.jewelOfLife}</div>
+                  <div className="text-orange-400">💎 <span className="font-bold">{character.jewelOfLife}</span></div>
                   <div className="text-gray-500 text-[10px]">Life</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-yellow-400">💎</div>
-                  <div className="text-yellow-400 font-bold">{character.jewelOfChaos}</div>
+                  <div className="text-yellow-400">💎 <span className="font-bold">{character.jewelOfChaos}</span></div>
                   <div className="text-gray-500 text-[10px]">Chaos</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-cyan-400">📜</div>
-                  <div className="text-cyan-400 font-bold">{character.scrollOfArchangel}</div>
+                  <div className="text-cyan-400">📜 <span className="font-bold">{character.scrollOfArchangel}</span></div>
                   <div className="text-gray-500 text-[10px]">Scroll</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-red-400">🦴</div>
-                  <div className="text-red-400 font-bold">{character.bloodBone}</div>
-                  <div className="text-gray-500 text-[10px]">Blood Bone</div>
+                  <div className="text-red-400">🦴 <span className="font-bold">{character.bloodBone}</span></div>
+                  <div className="text-gray-500 text-[10px]">Bone</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-amber-400">🗝️</div>
-                  <div className="text-amber-400 font-bold">{character.devilsKey}</div>
-                  <div className="text-gray-500 text-[10px]">Devil Key</div>
+                  <div className="text-amber-400">🗝️ <span className="font-bold">{character.devilsKey}</span></div>
+                  <div className="text-gray-500 text-[10px]">Key</div>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <div className="text-green-400">👁️</div>
-                  <div className="text-green-400 font-bold">{character.devilsEye}</div>
-                  <div className="text-gray-500 text-[10px]">Devil Eye</div>
+                  <div className="text-green-400">👁️ <span className="font-bold">{character.devilsEye}</span></div>
+                  <div className="text-gray-500 text-[10px]">Eye</div>
+                </div>
+                <div className="bg-gray-700/50 rounded p-2">
+                  <div className="text-emerald-400">🪶 <span className="font-bold">{character.feather}</span></div>
+                  <div className="text-gray-500 text-[10px]">Feather</div>
                 </div>
               </div>
             </div>
@@ -1327,52 +1308,63 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Stat Points */}
+                {/* Stat Upgrades */}
                 <div className="mt-3 pt-3 border-t border-gray-700">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-semibold flex items-center gap-1">
-                      Stats
+                      Upgrade Stats
                       <InfoTooltip
                         color="blue"
                         content={
                           <div className="space-y-1">
-                            <div className="font-bold text-yellow-400 mb-1">Stat Formulas:</div>
-                            <div><span className="text-red-400">Strength:</span> +1.1x min dmg, +1.6x max dmg</div>
-                            <div><span className="text-blue-400">Agility:</span> +0.5x defense, +0.15x atk speed</div>
-                            <div><span className="text-green-400">Vitality:</span> +5 HP per point</div>
+                            <div className="font-bold text-yellow-400 mb-1">Stat Bonuses:</div>
+                            <div><span className="text-red-400">DMG:</span> +2 min, +3 max damage per level</div>
+                            <div><span className="text-blue-400">DEF:</span> +1 defense per level</div>
+                            <div><span className="text-cyan-400">Speed:</span> +1 attack speed per level</div>
+                            <div><span className="text-green-400">HP:</span> +10 HP per level</div>
+                            <div className="text-gray-400 mt-1 text-xs">Cost: 100 × level^1.5 zen</div>
                           </div>
                         }
                       />
                     </span>
-                    <span className="text-blue-400 font-bold">Points: {character.levelupPoints}</span>
                   </div>
+                  {/* Multiplier Toggle */}
+                  <div className="flex gap-1 mb-2">
+                    {([1, 5, 10, 100, 'max'] as const).map((mult) => (
+                      <button
+                        key={mult}
+                        onClick={() => setUpgradeMultiplier(mult)}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors ${
+                          upgradeMultiplier === mult
+                            ? 'bg-yellow-500 text-gray-900'
+                            : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                        }`}
+                      >
+                        {mult === 'max' ? 'MAX' : `x${mult}`}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Stats */}
                   {[
-                    { key: 'damage', label: 'STR', value: character.damage },
-                    { key: 'defense', label: 'AGI', value: character.defense },
-                    { key: 'vitality', label: 'VIT', value: character.vitality },
-                  ].map(({ key, label, value }) => (
-                    <div key={key} className="flex justify-between items-center py-1">
-                      <span className="text-gray-400">{label}</span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono w-10 text-right">{value}</span>
-                        {character.levelupPoints >= 5 && (
-                          <>
-                            <button onClick={() => handleAddStat(key, 5)} className="px-2 h-7 bg-green-600 hover:bg-green-500 rounded text-sm font-bold">+5</button>
-                            <button onClick={() => handleAddStat(key, 10)} disabled={character.levelupPoints < 10} className="px-2 h-7 bg-yellow-600 hover:bg-yellow-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-sm font-bold">+10</button>
-                            <button onClick={() => handleAddStat(key, 50)} disabled={character.levelupPoints < 50} className="px-2 h-7 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-sm font-bold">+50</button>
-                            <button onClick={() => handleAddStat(key, character.levelupPoints)} className="px-2 h-7 bg-red-600 hover:bg-red-500 rounded text-sm font-bold">max</button>
-                          </>
-                        )}
+                    { key: 'dmg' as const, label: 'DMG', value: character.dmgLevel, cost: upgradeCosts.dmg, color: 'text-red-400' },
+                    { key: 'def' as const, label: 'DEF', value: character.defLevel, cost: upgradeCosts.def, color: 'text-blue-400' },
+                    { key: 'speed' as const, label: 'Speed', value: character.speedLevel, cost: upgradeCosts.speed, color: 'text-cyan-400' },
+                    { key: 'hp' as const, label: 'HP', value: character.hpLevel, cost: upgradeCosts.hp, color: 'text-green-400' },
+                  ].map(({ key, label, value, cost, color }) => (
+                    <div key={key} className="flex justify-between items-center py-1.5 bg-gray-700/30 rounded px-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`${color} font-bold w-12`}>{label}</span>
+                        <span className="text-white font-mono">Lv.{value}</span>
                       </div>
+                      <button
+                        onClick={() => handleUpgradeStat(key)}
+                        disabled={BigInt(character.zen) < BigInt(cost)}
+                        className="px-2 py-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-xs font-bold transition-colors"
+                      >
+                        {BigInt(cost).toLocaleString()} Zen
+                      </button>
                     </div>
                   ))}
-                  <button
-                    onClick={handleRebuild}
-                    disabled={BigInt(character.zen) < 1000000n}
-                    className="w-full mt-2 py-2 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-700 disabled:opacity-50 rounded text-sm font-bold"
-                  >
-                    Rebuild (1M Zen)
-                  </button>
                   {character.level >= 400 && (
                     <button
                       onClick={handleReset}
@@ -1386,16 +1378,16 @@ export default function HomePage() {
                 {/* Combat Stats */}
                 <div className="mt-3 pt-3 border-t border-gray-700">
                   <h3 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-1">
-                    Combat
+                    Combat Stats
                     <InfoTooltip
                       color="yellow"
                       content={
                         <div className="space-y-1">
-                          <div className="font-bold text-yellow-400 mb-1">Combat Formulas:</div>
-                          <div><span className="text-red-400">Attack:</span> STR × 1.1-1.6 + weapon</div>
-                          <div><span className="text-blue-400">Defense:</span> AGI × 0.5 + armor</div>
-                          <div><span className="text-cyan-400">Crit Rate:</span> 1% + level/40 + STR/200</div>
-                          <div><span className="text-orange-400">ATK Speed:</span> AGI × 0.15 + weapon</div>
+                          <div className="font-bold text-yellow-400 mb-1">Combat Values:</div>
+                          <div><span className="text-red-400">Attack:</span> DMG level × 2-3 + weapon</div>
+                          <div><span className="text-blue-400">Defense:</span> DEF level + armor</div>
+                          <div><span className="text-cyan-400">ATK Speed:</span> Speed level + weapon (max 200)</div>
+                          <div><span className="text-green-400">Max HP:</span> 50 + HP level × 10</div>
                         </div>
                       }
                     />
@@ -1411,15 +1403,15 @@ export default function HomePage() {
                     </div>
                     <div className="bg-gray-700/50 rounded p-2">
                       <span className="text-gray-500">HP:</span>
-                      <span className="ml-1 text-red-400 font-bold">{stats.maxHp}</span>
+                      <span className="ml-1 text-green-400 font-bold">{stats.maxHp}</span>
                     </div>
                     <div className="bg-gray-700/50 rounded p-2">
                       <span className="text-gray-500">Crit:</span>
-                      <span className="ml-1 text-cyan-400 font-bold">{stats.criticalRate}%</span>
+                      <span className="ml-1 text-yellow-400 font-bold">{stats.criticalRate}%</span>
                     </div>
                     <div className="bg-gray-700/50 rounded p-2 col-span-2">
                       <span className="text-gray-500">ATK Speed:</span>
-                      <span className="ml-1 text-orange-400 font-bold">{totalStats.attackSpeed}</span>
+                      <span className="ml-1 text-cyan-400 font-bold">{totalStats.attackSpeed}</span>
                       {totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}
                     </div>
                   </div>
@@ -1454,7 +1446,7 @@ export default function HomePage() {
                 </div>
                 <div className="grid grid-cols-6 gap-1">
                   {inventory.map((slot) => (
-                    <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} />
+                    <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} onDeposit={handleDepositItem} />
                   ))}
                 </div>
               </div>

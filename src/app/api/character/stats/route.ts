@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId, unauthorizedResponse, errorResponse } from '@/lib/auth-utils';
-import { getCharacterById, getLatestCharacter, addStatPoint } from '@/lib/services/character.service';
-import { getEquipmentBonuses, calculateStats } from '@/lib/services/stats.service';
+import { getCharacterById, getLatestCharacter } from '@/lib/services/character.service';
+import { getEquipmentBonuses, calculateStats, calculateUpgradeCost, calculateMaxUpgrades } from '@/lib/services/stats.service';
+import prisma from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   const userId = await getCurrentUserId();
@@ -30,11 +31,19 @@ export async function GET(request: NextRequest) {
         damage: character.damage,
         defense: character.defense,
         vitality: character.vitality,
-        blockStat: character.blockStat,
-        attackSpeedStat: character.attackSpeedStat,
+        speedStat: character.speedStat,
       },
       bonuses
     );
+
+    // Calculate upgrade costs
+    const zen = BigInt(character.zen);
+    const upgradeCosts = {
+      dmg: calculateUpgradeCost(character.damage, 1).toString(),
+      def: calculateUpgradeCost(character.defense, 1).toString(),
+      speed: calculateUpgradeCost(character.speedStat, 1).toString(),
+      hp: calculateUpgradeCost(character.vitality, 1).toString(),
+    };
 
     return NextResponse.json({
       success: true,
@@ -42,12 +51,12 @@ export async function GET(request: NextRequest) {
         id: character.id,
         name: character.characterName,
         level: character.level,
-        damage: character.damage,
-        defense: character.defense,
-        vitality: character.vitality,
-        block: character.blockStat,
-        attackSpeed: character.attackSpeedStat,
-        levelupPoints: character.levelupPoints,
+        zen: character.zen.toString(),
+        // Stat levels
+        dmgLevel: character.damage,
+        defLevel: character.defense,
+        speedLevel: character.speedStat,
+        hpLevel: character.vitality,
       },
       stats: {
         minDamage: stats.minDamage,
@@ -57,6 +66,7 @@ export async function GET(request: NextRequest) {
         maxHp: stats.maxHp,
         criticalRate: stats.criticalRate,
       },
+      upgradeCosts,
       bonuses,
     });
   } catch (error) {
@@ -73,7 +83,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { character_id, stat_name, amount = 1 } = body;
 
-    const validStats = ['damage', 'defense', 'vitality', 'blockStat', 'attackSpeedStat'];
+    const validStats = ['dmg', 'def', 'speed', 'hp'];
     if (!stat_name || !validStats.includes(stat_name)) {
       return errorResponse('Invalid stat name');
     }
@@ -89,23 +99,54 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
-    const result = await addStatPoint(
-      character.id,
-      stat_name as 'damage' | 'defense' | 'vitality' | 'blockStat' | 'attackSpeedStat',
-      amount
-    );
+    // Map stat names to database columns
+    const statMap: Record<string, 'damage' | 'defense' | 'speedStat' | 'vitality'> = {
+      dmg: 'damage',
+      def: 'defense',
+      speed: 'speedStat',
+      hp: 'vitality',
+    };
 
-    if (!result.success) {
-      return errorResponse(result.message ?? 'Failed to add stat point');
+    const dbColumn = statMap[stat_name];
+    const currentLevel = character[dbColumn];
+    const zen = BigInt(character.zen);
+
+    // Handle 'max' amount
+    let upgradeAmount = amount;
+    if (amount === 'max' || amount === -1) {
+      upgradeAmount = calculateMaxUpgrades(currentLevel, zen);
+      if (upgradeAmount === 0) {
+        return errorResponse('Not enough zen for even one upgrade');
+      }
     }
 
-    // Get updated character and stats
-    const updatedCharacter = await getCharacterById(character.id, userId);
-    if (!updatedCharacter) {
-      return errorResponse('Character not found after update', 404);
+    // Calculate cost
+    const cost = calculateUpgradeCost(currentLevel, upgradeAmount);
+
+    if (zen < cost) {
+      return errorResponse('Not enough zen');
     }
 
-    const bonuses = await getEquipmentBonuses(updatedCharacter.id);
+    // Update character
+    const newLevel = currentLevel + upgradeAmount;
+    const newZen = zen - cost;
+
+    await prisma.playerCharacter.update({
+      where: { id: character.id },
+      data: {
+        [dbColumn]: newLevel,
+        zen: newZen,
+      },
+    });
+
+    // Get updated stats
+    const bonuses = await getEquipmentBonuses(character.id);
+    const updatedCharacter = {
+      ...character,
+      [dbColumn]: newLevel,
+      zen: newZen,
+    };
+
     const stats = calculateStats(
       {
         id: updatedCharacter.id,
@@ -113,16 +154,25 @@ export async function POST(request: NextRequest) {
         damage: updatedCharacter.damage,
         defense: updatedCharacter.defense,
         vitality: updatedCharacter.vitality,
-        blockStat: updatedCharacter.blockStat,
-        attackSpeedStat: updatedCharacter.attackSpeedStat,
+        speedStat: updatedCharacter.speedStat,
       },
       bonuses
     );
 
+    // Calculate new upgrade costs
+    const upgradeCosts = {
+      dmg: calculateUpgradeCost(updatedCharacter.damage, 1).toString(),
+      def: calculateUpgradeCost(updatedCharacter.defense, 1).toString(),
+      speed: calculateUpgradeCost(updatedCharacter.speedStat, 1).toString(),
+      hp: calculateUpgradeCost(updatedCharacter.vitality, 1).toString(),
+    };
+
     return NextResponse.json({
       success: true,
-      newValue: result.newValue,
-      remainingPoints: updatedCharacter.levelupPoints,
+      stat: stat_name,
+      newLevel,
+      cost: cost.toString(),
+      zen: newZen.toString(),
       stats: {
         minDamage: stats.minDamage,
         maxDamage: stats.maxDamage,
@@ -131,9 +181,10 @@ export async function POST(request: NextRequest) {
         maxHp: stats.maxHp,
         criticalRate: stats.criticalRate,
       },
+      upgradeCosts,
     });
   } catch (error) {
-    console.error('Add stat point error:', error);
+    console.error('Upgrade stat error:', error);
     return errorResponse('Server error', 500);
   }
 }
