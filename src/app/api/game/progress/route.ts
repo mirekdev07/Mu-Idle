@@ -8,7 +8,16 @@ export async function POST(request: NextRequest) {
   if (!userId) return unauthorizedResponse();
 
   try {
-    const body = await request.json();
+    // Support both JSON and text/plain (for sendBeacon)
+    const contentType = request.headers.get('content-type') || '';
+    let body;
+    if (contentType.includes('application/json')) {
+      body = await request.json();
+    } else {
+      // sendBeacon sends as text/plain
+      const text = await request.text();
+      body = JSON.parse(text);
+    }
     const {
       character_id,
       experience,
@@ -42,10 +51,10 @@ export async function POST(request: NextRequest) {
     let newExp = experience !== undefined ? BigInt(experience) : character.experience;
     let newLevel = level !== undefined ? level : character.level;
 
-    // Auto level up calculation (no points in new system)
+    // Auto level up calculation (quadratic formula: level² × 3.75)
     if (experience !== undefined) {
-      while (newExp >= BigInt(newLevel * 50) && newLevel < MAX_LEVEL) {
-        newExp -= BigInt(newLevel * 50);
+      while (newExp >= BigInt(Math.floor(newLevel * newLevel * 3.75)) && newLevel < MAX_LEVEL) {
+        newExp -= BigInt(Math.floor(newLevel * newLevel * 3.75));
         newLevel++;
       }
       // Cap exp at 0 if max level
@@ -67,11 +76,11 @@ export async function POST(request: NextRequest) {
       updateData.deaths = deaths;
     }
 
-    // Offline rewards: save production rates
-    if (exp_per_second !== undefined) {
+    // Offline rewards: save production rates (only if positive, don't overwrite with 0)
+    if (exp_per_second !== undefined && exp_per_second > 0) {
       updateData.lastExpPerSecond = exp_per_second;
     }
-    if (zen_per_second !== undefined) {
+    if (zen_per_second !== undefined && zen_per_second > 0) {
       updateData.lastZenPerSecond = zen_per_second;
     }
 

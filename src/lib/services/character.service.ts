@@ -145,9 +145,9 @@ export async function deleteCharacter(characterId: number, userId: number) {
 
 // Experience required for next level (quadratic formula - slower progression)
 export function getExpForLevel(level: number): bigint {
-  // Quadratic formula: level² × 5
-  // Level 1: 5 EXP, Level 100: 50,000 EXP, Level 400: 800,000 EXP
-  return BigInt(level * level * 5);
+  // Quadratic formula: level² × 3.75 (reduced by 25%)
+  // Level 1: 3 EXP, Level 100: 37,500 EXP, Level 400: 600,000 EXP
+  return BigInt(Math.floor(level * level * 3.75));
 }
 
 // Calculate how many level ups and remaining exp

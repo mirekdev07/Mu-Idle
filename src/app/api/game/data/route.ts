@@ -117,9 +117,9 @@ export async function GET(request: NextRequest) {
         const MAX_LEVEL = 400;
         let newLevel = character.level;
 
-        // Quadratic formula: level² × 5
-        while (newExp >= BigInt(newLevel * newLevel * 5) && newLevel < MAX_LEVEL) {
-          newExp -= BigInt(newLevel * newLevel * 5);
+        // Quadratic formula: level² × 3.75 (reduced by 25%)
+        while (newExp >= BigInt(Math.floor(newLevel * newLevel * 3.75)) && newLevel < MAX_LEVEL) {
+          newExp -= BigInt(Math.floor(newLevel * newLevel * 3.75));
           newLevel++;
         }
 

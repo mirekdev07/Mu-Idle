@@ -570,10 +570,10 @@ export default function WikiPage() {
                 EXP and Zen gained scales with monster level. Higher level monsters give more rewards.
               </p>
               <p className="text-sm mt-2">
-                <span className="text-gray-400">Level up requirement:</span> <span className="text-white">Level² × 5 EXP</span>
+                <span className="text-gray-400">Level up requirement:</span> <span className="text-white">Level² × 3.75 EXP</span>
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Example: Level 100 needs 50,000 EXP, Level 400 needs 800,000 EXP
+                Example: Level 100 needs 37,500 EXP, Level 400 needs 600,000 EXP
               </p>
             </div>
           </div>

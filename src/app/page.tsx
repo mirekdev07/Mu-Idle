@@ -268,8 +268,9 @@ export default function HomePage() {
             level: gameData.character.level,
             monsters_killed: localMonstersKilled,
             deaths: localDeaths,
-            exp_per_second: expPerSecond,
-            zen_per_second: zenPerSecond,
+            // Only send exp/zen per second if they're positive (don't overwrite with 0)
+            exp_per_second: expPerSecond > 0 ? expPerSecond : undefined,
+            zen_per_second: zenPerSecond > 0 ? zenPerSecond : undefined,
             update_heartbeat: updateHeartbeat,
           }),
         });
@@ -279,25 +280,41 @@ export default function HomePage() {
       }
     };
 
+    // Use sendBeacon for reliable saves on page close
+    const saveProgressBeacon = () => {
+      const data = {
+        character_id: gameData.character.id,
+        experience: gameData.character.experience,
+        zen: gameData.character.zen,
+        level: gameData.character.level,
+        monsters_killed: localMonstersKilled,
+        deaths: localDeaths,
+        exp_per_second: expPerSecond > 0 ? expPerSecond : undefined,
+        zen_per_second: zenPerSecond > 0 ? zenPerSecond : undefined,
+        update_heartbeat: false,
+      };
+      navigator.sendBeacon('/api/game/progress', JSON.stringify(data));
+    };
+
     const saveInterval = setInterval(saveProgress, 30000);
 
-    // Also save on page unload (without updating heartbeat for offline tracking)
+    // Also save on page unload using sendBeacon for reliability
     const handleBeforeUnload = () => {
-      saveProgress(false);
+      saveProgressBeacon();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     // Mobile: save on visibility change (when user switches apps or tabs)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        saveProgress(false);
+        saveProgressBeacon();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Mobile: save on page hide (iOS Safari)
     const handlePageHide = () => {
-      saveProgress(false);
+      saveProgressBeacon();
     };
     window.addEventListener('pagehide', handlePageHide);
 
@@ -349,15 +366,15 @@ export default function HomePage() {
     }
     setLastExpUpdate({ exp: newExp, zen: newZen, time: now });
 
-    // Check for level up (quadratic formula: level² × 5 exp needed)
+    // Check for level up (quadratic formula: level² × 3.75 exp needed)
     // Max level is 400
     const MAX_LEVEL = 400;
     let newLevel = gameData.character.level;
     let remainingExp = newExp;
     let levelsGained = 0;
 
-    while (remainingExp >= BigInt(newLevel * newLevel * 5) && newLevel < MAX_LEVEL) {
-      remainingExp -= BigInt(newLevel * newLevel * 5);
+    while (remainingExp >= BigInt(Math.floor(newLevel * newLevel * 3.75)) && newLevel < MAX_LEVEL) {
+      remainingExp -= BigInt(Math.floor(newLevel * newLevel * 3.75));
       newLevel++;
       levelsGained++;
     }
