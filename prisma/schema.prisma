@@ -94,6 +94,10 @@ model PlayerCharacter {
   // Skill cooldowns
   burstCooldownEnd DateTime? @map("burst_cooldown_end")
 
+  // Helpers system
+  helperAttackerLevel Int @default(0) @map("helper_attacker_level") // Attacks 2x per second
+  helperBufferLevel   Int @default(0) @map("helper_buffer_level")   // +0.1% DMG per level, max 100
+
   // Daily event entries (reset daily, per character)
   bloodCastleEntriesToday Int      @default(0) @map("blood_castle_entries_today")
   devilSquareEntriesToday Int      @default(0) @map("devil_square_entries_today")

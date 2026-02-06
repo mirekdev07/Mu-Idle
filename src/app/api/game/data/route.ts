@@ -209,6 +209,9 @@ export async function GET(request: NextRequest) {
         ascExp: character.ascExp,
         ascPoison: character.ascPoison,
         ascExcellent: character.ascExcellent,
+        // Helpers system
+        helperAttackerLevel: character.helperAttackerLevel,
+        helperBufferLevel: character.helperBufferLevel,
       },
       inventory,
       equipment,

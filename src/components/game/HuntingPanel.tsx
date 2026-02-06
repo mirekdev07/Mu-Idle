@@ -22,6 +22,11 @@ interface HuntingPanelProps {
   burstCooldownEnd?: string | null;
   excellentChance?: number;  // % chance for excellent hit (2x damage)
   poisonChance?: number;     // % chance for poison (10% of monster current HP)
+  // Helpers
+  helperAttackerLevel?: number;
+  helperBufferLevel?: number;
+  helperAttackerDamage?: number;
+  helperBufferBonus?: number;  // % DMG bonus
   onHpChange: (newHp: number) => void;
   onExpGain: (exp: bigint, zen: bigint) => void;
   onItemDrop: (monsterLevel: number) => void;
@@ -39,7 +44,7 @@ interface ActiveMonster extends Monster {
 interface FloatingDamage {
   id: number;
   damage: number;
-  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect' | 'poison';
+  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect' | 'poison' | 'helper';
   x: number;
   y: number;
 }
@@ -70,6 +75,10 @@ export default function HuntingPanel({
   burstCooldownEnd,
   excellentChance = 5,
   poisonChance = 0,
+  helperAttackerLevel = 0,
+  helperBufferLevel = 0,
+  helperAttackerDamage = 0,
+  helperBufferBonus = 0,
   onHpChange,
   onExpGain,
   onItemDrop,
@@ -258,7 +267,10 @@ export default function HuntingPanel({
     const isExcellent = Math.random() * 100 < excellentChance;
     const isPoison = poisonChance > 0 && Math.random() * 100 < poisonChance;
 
-    const playerDamage = calculateDamage(minDamage, maxDamage, isCritical, isExcellent);
+    // Apply buffer bonus to damage
+    const buffedMinDamage = Math.floor(minDamage * (1 + helperBufferBonus / 100));
+    const buffedMaxDamage = Math.floor(maxDamage * (1 + helperBufferBonus / 100));
+    const playerDamage = calculateDamage(buffedMinDamage, buffedMaxDamage, isCritical, isExcellent);
 
     // Poison deals 10% of monster's CURRENT HP
     const poisonDamage = isPoison ? Math.floor(currentMonster.currentHp * 0.1) : 0;
@@ -479,6 +491,75 @@ export default function HuntingPanel({
     };
   }, [isHunting, currentHp, attackSpeed, burstActive, performCombatRound]);
 
+  // Helper Attacker combat loop (2 attacks per second = 500ms interval)
+  const helperIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const performHelperAttack = useCallback(() => {
+    if (!currentMonster || currentHp <= 0 || helperAttackerLevel <= 0) return;
+
+    // Helper damage: base 5 + level * 2
+    const helperDmg = helperAttackerDamage > 0 ? helperAttackerDamage : 5 + helperAttackerLevel * 2;
+    const newMonsterHp = Math.max(0, currentMonster.currentHp - helperDmg);
+
+    addFloatingDamage(helperDmg, 'helper');
+
+    if (newMonsterHp <= 0) {
+      // Monster killed by helper - same rewards as player kill
+      setMonstersKilled((prev) => prev + 1);
+      onMonsterKill();
+
+      const resetExpBonus = resetCount * 0.1;
+      const resetZenBonus = resetCount * 0.1;
+      const expGain = Math.floor(currentMonster.exp * 5.625 * (1 + (expBonus + resetExpBonus) / 100));
+      const zenGain = Math.floor(currentMonster.zen * 36 * (1 + (zenBonus - 1 + resetZenBonus) / 100));
+
+      onExpGain(BigInt(expGain), BigInt(zenGain));
+
+      // Heal 5% HP on kill
+      const healAmount = Math.floor(maxHp * 0.05);
+      const newHp = Math.min(maxHp, currentHp + healAmount);
+      if (newHp > currentHp) {
+        onHpChange(newHp);
+      }
+
+      // Item drop
+      if (Math.random() < 0.02) {
+        onItemDrop(currentMonster.level);
+      }
+
+      // Jewel drops
+      if (currentMonster.level >= 41) {
+        if (Math.random() < 0.008) onJewelDrop('bless');
+        if (Math.random() < 0.008) onJewelDrop('soul');
+        if (Math.random() < 0.008) onJewelDrop('life');
+        if (Math.random() < 0.004) onJewelDrop('chaos');
+      }
+
+      setCurrentMonster(null);
+      setTimeout(() => setCurrentMonster(spawnMonster()), 500);
+    } else {
+      setCurrentMonster({ ...currentMonster, currentHp: newMonsterHp });
+    }
+  }, [currentMonster, currentHp, helperAttackerLevel, helperAttackerDamage, resetCount, expBonus, zenBonus, maxHp, onExpGain, onHpChange, onItemDrop, onJewelDrop, onMonsterKill, addFloatingDamage, spawnMonster]);
+
+  useEffect(() => {
+    if (isHunting && currentHp > 0 && helperAttackerLevel > 0) {
+      // Helper attacks 2x per second
+      helperIntervalRef.current = setInterval(performHelperAttack, 500);
+    } else {
+      if (helperIntervalRef.current) {
+        clearInterval(helperIntervalRef.current);
+        helperIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (helperIntervalRef.current) {
+        clearInterval(helperIntervalRef.current);
+      }
+    };
+  }, [isHunting, currentHp, helperAttackerLevel, performHelperAttack]);
+
   const startHunting = () => {
     if (currentHp <= 0) return;
     wasHuntingBeforeDeathRef.current = true;
@@ -636,6 +717,7 @@ export default function HuntingPanel({
                     fd.type === 'monster' ? 'text-red-500' :
                     fd.type === 'reflect' ? 'text-purple-400' :
                     fd.type === 'poison' ? 'text-lime-400' :
+                    fd.type === 'helper' ? 'text-amber-400' :
                     'text-yellow-400'
                   }`}
                   style={{
@@ -649,6 +731,7 @@ export default function HuntingPanel({
                   {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
                   {fd.type === 'reflect' && <span className="text-xs ml-1">REFLECT!</span>}
                   {fd.type === 'poison' && <span className="text-xs ml-1">☠️</span>}
+                  {fd.type === 'helper' && <span className="text-xs ml-1">🤖</span>}
                 </div>
               ))}
 

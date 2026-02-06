@@ -54,6 +54,9 @@ interface CharacterData {
   ascExp: number;
   ascPoison: number;
   ascExcellent: number;
+  // Helpers system
+  helperAttackerLevel: number;
+  helperBufferLevel: number;
 }
 
 interface UpgradeCosts {
@@ -106,6 +109,13 @@ function calculateMaxUpgrades(currentLevel: number, availableZen: bigint): numbe
   }
 
   return upgrades;
+}
+
+// Helper upgrade cost calculation - exponential scaling (very expensive)
+function calculateHelperUpgradeCost(currentLevel: number, helperType: 'attacker' | 'buffer'): bigint {
+  const baseCost = helperType === 'attacker' ? 100000n : 50000n;
+  const multiplier = Math.floor(Math.pow(currentLevel + 1, 2.5));
+  return baseCost * BigInt(multiplier);
 }
 
 // Format large numbers with alphabet notation (idle game style)
@@ -172,6 +182,7 @@ export default function HomePage() {
   const [craftingItem, setCraftingItem] = useState<{ item: Item; slotIndex: number } | null>(null);
   const [upgradeCosts, setUpgradeCosts] = useState<UpgradeCosts>({ dmg: '0', def: '0', speed: '0', hp: '0', zen: '0' });
   const [upgradeMultiplier, setUpgradeMultiplier] = useState<1 | 5 | 10 | 100 | 'max'>(1);
+  const [helperCosts, setHelperCosts] = useState<{ attacker: string; buffer: string }>({ attacker: '100000', buffer: '50000' });
 
   const {
     inventory,
@@ -631,6 +642,44 @@ export default function HomePage() {
     }
   };
 
+  const handleUpgradeHelper = async (helperType: 'attacker' | 'buffer') => {
+    if (!gameData) return;
+
+    try {
+      const response = await fetch('/api/character/helpers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: gameData.character.id,
+          helper_type: helperType,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        const fieldName = helperType === 'attacker' ? 'helperAttackerLevel' : 'helperBufferLevel';
+        setGameData({
+          ...gameData,
+          character: {
+            ...gameData.character,
+            [fieldName]: data.newLevel,
+            zen: data.zen,
+          },
+        });
+
+        // Update helper costs
+        setHelperCosts({
+          ...helperCosts,
+          [helperType]: data.nextUpgradeCost,
+        });
+      } else {
+        console.error('Upgrade helper failed:', data.message);
+      }
+    } catch (err) {
+      console.error('Upgrade helper failed:', err);
+    }
+  };
+
   const handleReset = async () => {
     if (!gameData || gameData.character.level < 400) return;
 
@@ -810,16 +859,19 @@ export default function HomePage() {
   }
 
   const { character, stats } = gameData;
+  // Buffer helper bonus: +0.1% DMG per level
+  const bufferBonus = character.helperBufferLevel * 0.1;
+
   const totalStats = {
-    minDamage: stats.minDamage + (equipmentBonuses.damage_min || 0),
-    maxDamage: stats.maxDamage + (equipmentBonuses.damage_max || 0),
+    minDamage: Math.floor((stats.minDamage + (equipmentBonuses.damage_min || 0)) * (1 + bufferBonus / 100)),
+    maxDamage: Math.floor((stats.maxDamage + (equipmentBonuses.damage_max || 0)) * (1 + bufferBonus / 100)),
     defense: stats.physicalDefense + (equipmentBonuses.defense || 0),
     attackSpeed: Math.min(350, stats.attackSpeed + (equipmentBonuses.attack_speed || 0)),
   };
 
-  // EXP calculation helper
+  // EXP calculation helper (formula: level² × 3.75)
   const currentExp = BigInt(character.experience);
-  const expNeeded = BigInt(character.level * character.level * 5);
+  const expNeeded = BigInt(Math.floor(character.level * character.level * 3.75));
   const expPercentage = Number((currentExp * 100n) / expNeeded);
   const expRemaining = Number(expNeeded - currentExp);
   const timeToLevel = expPerSecond > 0 ? Math.ceil(expRemaining / expPerSecond) : null;
@@ -1208,6 +1260,73 @@ export default function HomePage() {
               )}
             </div>
 
+            {/* Helpers */}
+            <div className="mt-3 pt-3 border-t border-gray-700">
+              <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
+                🤖 Helpers
+                <InfoTooltip
+                  color="yellow"
+                  content={
+                    <div className="space-y-1 text-xs">
+                      <div className="font-bold text-yellow-400 mb-1">Helpers assist you in hunting:</div>
+                      <div><span className="text-amber-400">Attacker:</span> Deals DMG 2x per second</div>
+                      <div><span className="text-emerald-400">Buffer:</span> Increases your DMG by 0.1% per level (max 10%)</div>
+                    </div>
+                  }
+                />
+              </h3>
+              <div className="space-y-2">
+                {/* Attacker Helper */}
+                <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">⚔️</span>
+                    <div>
+                      <span className="text-amber-400 font-bold">Attacker</span>
+                      <span className="text-gray-400 ml-2">Lv.{character.helperAttackerLevel}</span>
+                      <div className="text-[10px] text-gray-500">
+                        DMG: {5 + character.helperAttackerLevel * 2} (2x/sec)
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleUpgradeHelper('attacker')}
+                    disabled={BigInt(character.zen) < calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')
+                        ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {formatNumber(calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker'))}
+                  </button>
+                </div>
+                {/* Buffer Helper */}
+                <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">✨</span>
+                    <div>
+                      <span className="text-emerald-400 font-bold">Buffer</span>
+                      <span className="text-gray-400 ml-2">Lv.{character.helperBufferLevel}/100</span>
+                      <div className="text-[10px] text-gray-500">
+                        +{(character.helperBufferLevel * 0.1).toFixed(1)}% DMG
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleUpgradeHelper('buffer')}
+                    disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {character.helperBufferLevel >= 100 ? 'MAX' : formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {/* Combat Stats */}
             <div className="mt-3 pt-3 border-t border-gray-700">
               <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
@@ -1330,6 +1449,10 @@ export default function HomePage() {
               burstCooldownEnd={character.burstCooldownEnd}
               excellentChance={stats.excellentChance}
               poisonChance={stats.poisonChance}
+              helperAttackerLevel={character.helperAttackerLevel}
+              helperBufferLevel={character.helperBufferLevel}
+              helperAttackerDamage={5 + character.helperAttackerLevel * 2}
+              helperBufferBonus={character.helperBufferLevel * 0.1}
               onHpChange={handleHpChange}
               onExpGain={handleExpGain}
               onItemDrop={handleItemDrop}
@@ -1533,6 +1656,10 @@ export default function HomePage() {
                 burstCooldownEnd={character.burstCooldownEnd}
                 excellentChance={stats.excellentChance}
                 poisonChance={stats.poisonChance}
+                helperAttackerLevel={character.helperAttackerLevel}
+                helperBufferLevel={character.helperBufferLevel}
+                helperAttackerDamage={5 + character.helperAttackerLevel * 2}
+                helperBufferBonus={character.helperBufferLevel * 0.1}
                 onHpChange={handleHpChange}
                 onExpGain={handleExpGain}
                 onItemDrop={handleItemDrop}
@@ -1618,6 +1745,61 @@ export default function HomePage() {
                   </div>
                 );
               })}
+
+              {/* Helpers - Mobile */}
+              <div className="mt-3 pt-3 border-t border-gray-700">
+                <h3 className="text-xs font-semibold text-gray-400 mb-2">🤖 Helpers</h3>
+                <div className="space-y-2">
+                  {/* Attacker Helper */}
+                  <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⚔️</span>
+                      <div>
+                        <span className="text-amber-400 font-bold">Attacker</span>
+                        <span className="text-gray-400 ml-2">Lv.{character.helperAttackerLevel}</span>
+                        <div className="text-[10px] text-gray-500">
+                          DMG: {5 + character.helperAttackerLevel * 2} (2x/sec)
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleUpgradeHelper('attacker')}
+                      disabled={BigInt(character.zen) < calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')
+                          ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {formatNumber(calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker'))}
+                    </button>
+                  </div>
+                  {/* Buffer Helper */}
+                  <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">✨</span>
+                      <div>
+                        <span className="text-emerald-400 font-bold">Buffer</span>
+                        <span className="text-gray-400 ml-2">Lv.{character.helperBufferLevel}/100</span>
+                        <div className="text-[10px] text-gray-500">
+                          +{(character.helperBufferLevel * 0.1).toFixed(1)}% DMG
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleUpgradeHelper('buffer')}
+                      disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
+                          ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {character.helperBufferLevel >= 100 ? 'MAX' : formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               {/* Combat Stats - Mobile */}
               <div className="mt-3 pt-3 border-t border-gray-700">
