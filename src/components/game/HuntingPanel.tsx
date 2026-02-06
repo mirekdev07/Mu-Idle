@@ -17,6 +17,11 @@ interface HuntingPanelProps {
   lifeSteal?: number;
   reflectDamage?: number;
   expBonus?: number;
+  zenBonus?: number;
+  resetCount?: number;
+  burstCooldownEnd?: string | null;
+  excellentChance?: number;  // % chance for excellent hit (2x damage)
+  poisonChance?: number;     // % chance for poison (10% of monster current HP)
   onHpChange: (newHp: number) => void;
   onExpGain: (exp: bigint, zen: bigint) => void;
   onItemDrop: (monsterLevel: number) => void;
@@ -34,7 +39,7 @@ interface ActiveMonster extends Monster {
 interface FloatingDamage {
   id: number;
   damage: number;
-  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect';
+  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect' | 'poison';
   x: number;
   y: number;
 }
@@ -48,6 +53,7 @@ function calculateDamage(min: number, max: number, isCritical: boolean, isExcell
 }
 
 export default function HuntingPanel({
+  characterId,
   characterLevel,
   minDamage,
   maxDamage,
@@ -59,6 +65,11 @@ export default function HuntingPanel({
   lifeSteal = 0,
   reflectDamage = 0,
   expBonus = 0,
+  zenBonus = 1,
+  resetCount = 0,
+  burstCooldownEnd,
+  excellentChance = 5,
+  poisonChance = 0,
   onHpChange,
   onExpGain,
   onItemDrop,
@@ -74,6 +85,16 @@ export default function HuntingPanel({
   const [respawnCountdown, setRespawnCountdown] = useState<number | null>(null);
   const [inEvent, setInEvent] = useState(false);
   const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
+  const [burstCooldown, setBurstCooldown] = useState(() => {
+    // Initialize cooldown from saved value
+    if (burstCooldownEnd) {
+      const remaining = Math.ceil((new Date(burstCooldownEnd).getTime() - Date.now()) / 1000);
+      return remaining > 0 ? remaining : 0;
+    }
+    return 0;
+  });
+  const [burstActive, setBurstActive] = useState(false); // Burst mode active (5x speed)
+  const [burstTimeLeft, setBurstTimeLeft] = useState(0); // Seconds left in burst mode
 
   // Check if player is in event - poll localStorage
   useEffect(() => {
@@ -93,6 +114,40 @@ export default function HuntingPanel({
   const damageIdRef = useRef(0);
   const combatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const wasHuntingBeforeDeathRef = useRef(false);
+  const burstCooldownRef = useRef<NodeJS.Timeout | null>(null);
+
+  const burstTimeRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Burst cooldown timer
+  useEffect(() => {
+    if (burstCooldown > 0) {
+      burstCooldownRef.current = setTimeout(() => {
+        setBurstCooldown(burstCooldown - 1);
+      }, 1000);
+    }
+    return () => {
+      if (burstCooldownRef.current) {
+        clearTimeout(burstCooldownRef.current);
+      }
+    };
+  }, [burstCooldown]);
+
+  // Burst active timer (10 seconds duration)
+  useEffect(() => {
+    if (burstTimeLeft > 0) {
+      burstTimeRef.current = setTimeout(() => {
+        setBurstTimeLeft(burstTimeLeft - 1);
+      }, 1000);
+    } else if (burstActive && burstTimeLeft === 0) {
+      // Burst ended
+      setBurstActive(false);
+    }
+    return () => {
+      if (burstTimeRef.current) {
+        clearTimeout(burstTimeRef.current);
+      }
+    };
+  }, [burstTimeLeft, burstActive]);
 
   const location = LOCATIONS[selectedLocation];
   const isDead = currentHp <= 0;
@@ -200,11 +255,18 @@ export default function HuntingPanel({
 
     // Player attacks monster
     const isCritical = Math.random() * 100 < criticalRate;
-    const isExcellent = Math.random() * 100 < 5;
-    const playerDamage = calculateDamage(minDamage, maxDamage, isCritical, isExcellent);
-    const newMonsterHp = Math.max(0, currentMonster.currentHp - playerDamage);
+    const isExcellent = Math.random() * 100 < excellentChance;
+    const isPoison = poisonChance > 0 && Math.random() * 100 < poisonChance;
 
-    // Add floating damage
+    const playerDamage = calculateDamage(minDamage, maxDamage, isCritical, isExcellent);
+
+    // Poison deals 10% of monster's CURRENT HP
+    const poisonDamage = isPoison ? Math.floor(currentMonster.currentHp * 0.1) : 0;
+    const totalDamage = playerDamage + poisonDamage;
+
+    const newMonsterHp = Math.max(0, currentMonster.currentHp - totalDamage);
+
+    // Add floating damage for main hit
     if (isExcellent) {
       addFloatingDamage(playerDamage, 'excellent');
       addLog(`Excellent! You deal ${playerDamage} damage to ${currentMonster.name}!`, 'damage');
@@ -216,10 +278,22 @@ export default function HuntingPanel({
       addLog(`You deal ${playerDamage} damage to ${currentMonster.name}.`, 'damage');
     }
 
+    // Add floating damage for poison (separate number)
+    if (isPoison && poisonDamage > 0) {
+      setTimeout(() => {
+        addFloatingDamage(poisonDamage, 'poison');
+      }, 150);
+      addLog(`Poison! ${poisonDamage} extra damage!`, 'damage');
+    }
+
     // Check if monster died
     if (newMonsterHp <= 0) {
-      const expGain = Math.floor(currentMonster.exp * 1.2 * (1 + expBonus / 100)); // +20% base + equipment bonus
-      const zenGain = currentMonster.zen;
+      // Reset bonus: +0.1% per reset for both EXP and Zen
+      const resetExpBonus = resetCount * 0.1;
+      const resetZenBonus = resetCount * 0.1;
+
+      const expGain = Math.floor(currentMonster.exp * 5.625 * (1 + (expBonus + resetExpBonus) / 100)); // +87.5% base + equipment + reset bonus
+      const zenGain = Math.floor(currentMonster.zen * 36 * (1 + (zenBonus - 1 + resetZenBonus) / 100)); // +181% base + zenBonus level + reset bonus
 
       addLog(`${currentMonster.name} defeated! +${expGain} EXP, +${zenGain} Zen`, 'exp');
       setMonstersKilled((prev) => prev + 1);
@@ -287,7 +361,10 @@ export default function HuntingPanel({
 
       onExpGain(BigInt(expGain), BigInt(zenGain));
 
-      // Spawn new monster
+      // Immediately set monster to null to prevent double kills
+      setCurrentMonster(null);
+
+      // Spawn new monster after delay
       setTimeout(() => {
         setCurrentMonster(spawnMonster());
       }, 500);
@@ -340,6 +417,8 @@ export default function HuntingPanel({
     criticalRate,
     lifeSteal,
     reflectDamage,
+    excellentChance,
+    poisonChance,
     addLog,
     addFloatingDamage,
     onExpGain,
@@ -349,10 +428,42 @@ export default function HuntingPanel({
     spawnMonster,
   ]);
 
+  // Burst Attack - 5x attack speed for 10 seconds
+  const activateBurst = useCallback(async () => {
+    if (currentHp <= 0 || burstCooldown > 0 || burstActive) return;
+
+    // Save cooldown to database
+    try {
+      const response = await fetch('/api/character/burst', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character_id: characterId }),
+      });
+
+      if (!response.ok) {
+        console.error('Failed to save burst cooldown');
+        return;
+      }
+    } catch (err) {
+      console.error('Burst API error:', err);
+      return;
+    }
+
+    // Activate burst mode
+    setBurstActive(true);
+    setBurstTimeLeft(10); // 10 seconds duration
+
+    // Start cooldown (180 seconds = 3 minutes)
+    setBurstCooldown(180);
+  }, [currentHp, burstCooldown, burstActive, characterId]);
+
   // Combat loop
   useEffect(() => {
     if (isHunting && currentHp > 0) {
-      const attackInterval = Math.max(250, 2000 - attackSpeed * 10);
+      // Normal attack interval: scales with attack speed, min 150ms
+      const normalInterval = Math.max(150, 2000 - attackSpeed * 10);
+      // Burst mode: 5x faster (minimum 30ms)
+      const attackInterval = burstActive ? Math.max(30, normalInterval / 5) : normalInterval;
       combatIntervalRef.current = setInterval(performCombatRound, attackInterval);
     } else {
       if (combatIntervalRef.current) {
@@ -366,7 +477,7 @@ export default function HuntingPanel({
         clearInterval(combatIntervalRef.current);
       }
     };
-  }, [isHunting, currentHp, attackSpeed, performCombatRound]);
+  }, [isHunting, currentHp, attackSpeed, burstActive, performCombatRound]);
 
   const startHunting = () => {
     if (currentHp <= 0) return;
@@ -473,7 +584,22 @@ export default function HuntingPanel({
       </div>
 
       {/* Combat Area */}
-      <div className="bg-gray-900 rounded-lg p-4 min-h-[200px]">
+      <div className={`bg-gray-900 rounded-lg p-4 min-h-[200px] relative overflow-hidden ${burstActive ? 'animate-shake' : ''}`}>
+        {/* Burst Attack Overlay */}
+        {burstActive && (
+          <div className="absolute inset-0 z-20 pointer-events-none">
+            {/* Pulsing border effect */}
+            <div className="absolute inset-0 border-4 border-orange-500/50 rounded-lg animate-pulse" />
+            {/* Top banner */}
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-600 to-red-600 px-4 py-1 rounded-full">
+              <span className="text-white font-bold text-sm flex items-center gap-2">
+                ⚡ BURST MODE ⚡
+                <span className="bg-black/30 px-2 py-0.5 rounded text-xs">{burstTimeLeft}s</span>
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Player HP */}
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
@@ -499,7 +625,7 @@ export default function HuntingPanel({
               </div>
             </div>
           ) : currentMonster ? (
-            <div className="text-center py-4 relative">
+            <div className={`text-center py-4 relative ${burstActive ? 'animate-shake-fast' : ''}`}>
               {/* Floating Damage Numbers */}
               {floatingDamages.map((fd) => (
                 <div
@@ -509,6 +635,7 @@ export default function HuntingPanel({
                     fd.type === 'critical' ? 'text-cyan-400' :
                     fd.type === 'monster' ? 'text-red-500' :
                     fd.type === 'reflect' ? 'text-purple-400' :
+                    fd.type === 'poison' ? 'text-lime-400' :
                     'text-yellow-400'
                   }`}
                   style={{
@@ -521,6 +648,7 @@ export default function HuntingPanel({
                   {fd.type === 'excellent' && <span className="text-xs ml-1">EXC!</span>}
                   {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
                   {fd.type === 'reflect' && <span className="text-xs ml-1">REFLECT!</span>}
+                  {fd.type === 'poison' && <span className="text-xs ml-1">☠️</span>}
                 </div>
               ))}
 
@@ -541,8 +669,26 @@ export default function HuntingPanel({
               </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              {isHunting ? 'Spawning monster...' : 'Select a location and start hunting!'}
+            <div className="text-center py-4 relative">
+              {isHunting ? (
+                <>
+                  {/* Keep same structure as monster display to prevent UI jump */}
+                  <div className="text-4xl mb-2 opacity-30">💀</div>
+                  <div className="text-lg font-bold text-gray-500">Spawning...</div>
+                  <div className="text-sm text-gray-600">Next monster</div>
+                  <div className="mt-2 max-w-xs mx-auto">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span>HP</span>
+                      <span className="text-gray-600">---</span>
+                    </div>
+                    <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
+                      <div className="bg-gray-600 h-3 rounded-full w-0" />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="py-4 text-gray-500">Select a location and start hunting!</div>
+              )}
             </div>
           )}
         </div>
@@ -577,6 +723,35 @@ export default function HuntingPanel({
               </button>
             )}
           </div>
+
+          {/* Skill: Burst Attack */}
+          {!isDead && isHunting && (
+            <div className="mt-2">
+              <button
+                onClick={activateBurst}
+                disabled={burstCooldown > 0 || burstActive}
+                className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${
+                  burstCooldown > 0 || burstActive
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white shadow-lg shadow-orange-500/20'
+                }`}
+              >
+                <span className="text-lg">⚡</span>
+                <span>Burst Attack</span>
+                {burstActive ? (
+                  <span className="text-xs bg-orange-800 px-2 py-0.5 rounded animate-pulse">
+                    {burstTimeLeft}s
+                  </span>
+                ) : burstCooldown > 0 ? (
+                  <span className="text-xs bg-gray-800 px-2 py-0.5 rounded">
+                    {Math.floor(burstCooldown / 60)}:{(burstCooldown % 60).toString().padStart(2, '0')}
+                  </span>
+                ) : (
+                  <span className="text-xs bg-black/30 px-2 py-0.5 rounded">5x 10s</span>
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Stats */}
@@ -585,7 +760,7 @@ export default function HuntingPanel({
         </div>
       </div>
 
-      {/* CSS for floating animation */}
+      {/* CSS for animations */}
       <style jsx>{`
         @keyframes float-up {
           0% {
@@ -600,6 +775,26 @@ export default function HuntingPanel({
         .animate-float-up {
           animation: float-up 1s ease-out forwards;
         }
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+          20%, 40%, 60%, 80% { transform: translateX(2px); }
+        }
+        .animate-shake {
+          animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake-fast {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-4px) rotate(-1deg); }
+          50% { transform: translateX(4px) rotate(1deg); }
+          75% { transform: translateX(-4px) rotate(-1deg); }
+        }
+        .animate-shake-fast {
+          animation: shake-fast 0.15s ease-in-out infinite;
+        }
+
       `}</style>
     </div>
   );

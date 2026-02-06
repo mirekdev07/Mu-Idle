@@ -64,12 +64,24 @@ model PlayerCharacter {
   defense        Int @default(1)  // DEF stat
   vitality       Int @default(1)  // HP stat
   speedStat      Int @default(1) @map("speed_stat")  // Speed stat
+  zenMultiplier  Int @default(1) @map("zen_multiplier")  // Zen drop multiplier
 
   // HP system
   currentHp Int? @map("current_hp")
 
   // Reset system (available at level 400+)
   resetCount Int @default(0) @map("reset_count")
+
+  // Ascension system (skill tree)
+  ascensionPoints   Int @default(0) @map("ascension_points")  // Available points to spend
+  ascDamage         Int @default(0) @map("asc_damage")        // +2% damage per point
+  ascCritical       Int @default(0) @map("asc_critical")      // +1% crit rate per point
+  ascHealth         Int @default(0) @map("asc_health")        // +5% HP per point
+  ascLifeSteal      Int @default(0) @map("asc_life_steal")    // +0.5% life steal per point
+  ascZen            Int @default(0) @map("asc_zen")           // +3% zen per point
+  ascExp            Int @default(0) @map("asc_exp")           // +2% EXP per point
+  ascPoison         Int @default(0) @map("asc_poison")        // +1% poison chance per point (10% current HP dmg)
+  ascExcellent      Int @default(0) @map("asc_excellent")     // +1% excellent damage chance per point
 
   // Death tracking
   deaths Int @default(0)
@@ -78,6 +90,9 @@ model PlayerCharacter {
   lastHeartbeat          DateTime @default(now()) @map("last_heartbeat")
   lastExpPerSecond       Float    @default(0) @map("last_exp_per_second")
   lastZenPerSecond       Float    @default(0) @map("last_zen_per_second")
+
+  // Skill cooldowns
+  burstCooldownEnd DateTime? @map("burst_cooldown_end")
 
   // Daily event entries (reset daily, per character)
   bloodCastleEntriesToday Int      @default(0) @map("blood_castle_entries_today")

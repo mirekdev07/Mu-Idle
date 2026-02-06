@@ -8,6 +8,7 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Kris': '/images/items/0/0.webp',
   'Rapier': '/images/items/0/2.webp',
   'Sword of Assassin': '/images/items/0/4.webp',
+  'Blade': '/images/items/0/5.webp',
   'Katana': '/images/items/0/3.webp',
   'Gladius': '/images/items/0/6.webp',
   'Falchion': '/images/items/0/7.webp',
@@ -123,6 +124,8 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Guardian Shield': '/images/items/6/20.webp',
 
   // ==================== Category 7 - Helms ====================
+  'Pad Helm': '/images/items/7/0.webp',
+  'Bronze Helm': '/images/items/7/0.webp',
   'Dragon Helm': '/images/items/7/1.webp',
   'Legendary Helm': '/images/items/7/3.webp',
   'Leather Helm': '/images/items/7/5.webp',
@@ -161,6 +164,8 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Sunlight Mask': '/images/items/7/33.webp',
 
   // ==================== Category 8 - Armor ====================
+  'Pad Armor': '/images/items/8/2.webp',
+  'Bronze Armor': '/images/items/8/0.webp',
   'Dragon Armor': '/images/items/8/1.webp',
   'Legendary Armor': '/images/items/8/3.webp',
   'Leather Armor': '/images/items/8/5.webp',
@@ -204,6 +209,8 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Sunlight Armor': '/images/items/8/33.webp',
 
   // ==================== Category 9 - Pants ====================
+  'Pad Pants': '/images/items/9/2.webp',
+  'Bronze Pants': '/images/items/9/0.webp',
   'Dragon Pants': '/images/items/9/1.webp',
   'Legendary Pants': '/images/items/9/3.webp',
   'Leather Pants': '/images/items/9/5.webp',
@@ -247,6 +254,8 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Sunlight Pants': '/images/items/9/33.webp',
 
   // ==================== Category 10 - Gloves ====================
+  'Pad Gloves': '/images/items/10/2.webp',
+  'Bronze Gloves': '/images/items/10/0.webp',
   'Dragon Gloves': '/images/items/10/1.webp',
   'Legendary Gloves': '/images/items/10/3.webp',
   'Leather Gloves': '/images/items/10/5.webp',
@@ -290,6 +299,8 @@ const ITEM_IMAGES: Record<string, string | null> = {
   'Volcano Gloves': '/images/items/10/32.webp',
 
   // ==================== Category 11 - Boots ====================
+  'Pad Boots': '/images/items/11/2.webp',
+  'Bronze Boots': '/images/items/11/0.webp',
   'Dragon Boots': '/images/items/11/1.webp',
   'Legendary Boots': '/images/items/11/3.webp',
   'Leather Boots': '/images/items/11/5.webp',
@@ -380,7 +391,7 @@ export function hasItemImage(itemName: string): boolean {
 // Rozmiary itemów (domyślnie 76px, tutaj tylko wyjątki)
 const ITEM_SIZES: Record<string, number> = {
   // Armor - mniejsze
-  'Plate Armor': 50,
+  'Plate Armor': 34,
 
   // Ringi - mniejsze
   'Ring of Ice': 52,

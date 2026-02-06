@@ -3,8 +3,8 @@ import { CalculatedStats } from '@/lib/services/stats.service';
 
 // Experience required for next level
 export function getExpForLevel(level: number): number {
-  // Base * level^2 formula
-  return 100 * level * level;
+  // Quadratic formula: level² × 5
+  return level * level * 5;
 }
 
 // Calculate player damage against monster
@@ -70,15 +70,16 @@ export function calculateLifeSteal(damageDealt: number, lifeStealPercent: number
   return Math.floor(damageDealt * (lifeStealPercent / 100));
 }
 
-// Calculate EXP with bonus (includes global 50% bonus)
+// Calculate EXP with bonus (includes global 462% bonus)
 export function calculateExp(baseExp: number, expBonusPercent: number): number {
-  const globalBonus = 1.5; // +50% global EXP bonus
+  const globalBonus = 5.625; // +462% global EXP bonus (x3)
   return Math.floor(baseExp * globalBonus * (1 + expBonusPercent / 100));
 }
 
-// Calculate Zen with bonus
+// Calculate Zen with bonus (includes global 3500% bonus)
 export function calculateZen(baseZen: number, zenBonusPercent: number): number {
-  return Math.floor(baseZen * (1 + zenBonusPercent / 100));
+  const globalBonus = 36; // +3500% global Zen bonus (x36)
+  return Math.floor(baseZen * globalBonus * (1 + zenBonusPercent / 100));
 }
 
 // Check if player can hit monster (attack rate vs defense rate)

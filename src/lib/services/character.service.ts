@@ -86,7 +86,7 @@ export async function updateCurrentHp(characterId: number, hp: number) {
 
 export async function resetCharacter(
   characterId: number
-): Promise<{ success: boolean; message?: string }> {
+): Promise<{ success: boolean; message?: string; newResetCount?: number }> {
   const character = await prisma.playerCharacter.findUnique({
     where: { id: characterId },
   });
@@ -99,13 +99,22 @@ export async function resetCharacter(
     return { success: false, message: 'Character must be level 400+ to reset' };
   }
 
-  await prisma.playerCharacter.update({
+  // 2 million zen × reset number (1st reset = 2M, 2nd = 4M, 3rd = 6M, etc.)
+  const newResetNumber = character.resetCount + 1;
+  const RESET_ZEN_BONUS = BigInt(2000000 * newResetNumber);
+
+  const updated = await prisma.playerCharacter.update({
     where: { id: characterId },
     data: {
       level: 1,
       experience: 0n,
-      // Stats are NOT reset - they are purchased with zen
+      // Stats are kept after reset (DMG, DEF, Speed, HP, Zen%)
+      // Add zen bonus (2M × reset number)
+      zen: character.zen + RESET_ZEN_BONUS,
+      // Increment reset count
       resetCount: { increment: 1 },
+      // Grant 1 Ascension Point per reset
+      ascensionPoints: { increment: 1 },
       currentHp: null,
       // Reset heartbeat and rates to prevent offline rewards after reset
       lastHeartbeat: new Date(),
@@ -114,7 +123,7 @@ export async function resetCharacter(
     },
   });
 
-  return { success: true };
+  return { success: true, newResetCount: updated.resetCount };
 }
 
 export async function deleteCharacter(characterId: number, userId: number) {
@@ -134,12 +143,11 @@ export async function deleteCharacter(characterId: number, userId: number) {
   return { success: true };
 }
 
-// Experience required for next level (exponential formula)
+// Experience required for next level (quadratic formula - slower progression)
 export function getExpForLevel(level: number): bigint {
-  // Simple exponential formula: base * level^2 * multiplier
-  const base = 100n;
-  const levelBigInt = BigInt(level);
-  return base * levelBigInt * levelBigInt;
+  // Quadratic formula: level² × 5
+  // Level 1: 5 EXP, Level 100: 50,000 EXP, Level 400: 800,000 EXP
+  return BigInt(level * level * 5);
 }
 
 // Calculate how many level ups and remaining exp

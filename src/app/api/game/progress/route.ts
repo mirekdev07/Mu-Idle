@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
 
     // Auto level up calculation (no points in new system)
     if (experience !== undefined) {
-      while (newExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
-        newExp -= BigInt(newLevel * 100);
+      while (newExp >= BigInt(newLevel * 50) && newLevel < MAX_LEVEL) {
+        newExp -= BigInt(newLevel * 50);
         newLevel++;
       }
       // Cap exp at 0 if max level

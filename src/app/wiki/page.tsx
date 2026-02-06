@@ -75,20 +75,6 @@ export default function WikiPage() {
                         <div className="text-xs text-gray-400">Craft items & tickets</div>
                       </div>
                     </Link>
-                    <Link href="/characters" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
-                      <span className="text-xl">👤</span>
-                      <div>
-                        <div className="font-medium">Characters</div>
-                        <div className="text-xs text-gray-400">Manage your heroes</div>
-                      </div>
-                    </Link>
-                    <Link href="/ranking" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50">
-                      <span className="text-xl">🏆</span>
-                      <div>
-                        <div className="font-medium">Ranking</div>
-                        <div className="text-xs text-gray-400">Top players</div>
-                      </div>
-                    </Link>
                   </div>
                 </div>
               </>
@@ -104,8 +90,9 @@ export default function WikiPage() {
         <nav className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
           <h2 className="text-lg font-bold text-yellow-400 mb-3">Table of Contents</h2>
           <ul className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-            <li><a href="#stats" className="text-blue-400 hover:text-blue-300">Character Stats</a></li>
+            <li><a href="#stats" className="text-blue-400 hover:text-blue-300">Upgrade Stats</a></li>
             <li><a href="#combat" className="text-blue-400 hover:text-blue-300">Combat System</a></li>
+            <li><a href="#ascension" className="text-blue-400 hover:text-blue-300">Ascension System</a></li>
             <li><a href="#items" className="text-blue-400 hover:text-blue-300">Items & Rarity</a></li>
             <li><a href="#options" className="text-blue-400 hover:text-blue-300">Item Options</a></li>
             <li><a href="#enhancement" className="text-blue-400 hover:text-blue-300">Enhancement (+1-9)</a></li>
@@ -113,48 +100,62 @@ export default function WikiPage() {
             <li><a href="#drops" className="text-blue-400 hover:text-blue-300">Drop Rates</a></li>
             <li><a href="#locations" className="text-blue-400 hover:text-blue-300">Locations</a></li>
             <li><a href="#reset" className="text-blue-400 hover:text-blue-300">Character Reset</a></li>
-            <li><a href="#rebuild" className="text-blue-400 hover:text-blue-300">Stat Rebuild</a></li>
             <li><a href="#accessories" className="text-blue-400 hover:text-blue-300">Accessories</a></li>
           </ul>
         </nav>
 
-        {/* Character Stats */}
+        {/* Upgrade Stats */}
         <section id="stats" className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-          <h2 className="text-xl font-bold text-yellow-400 mb-4">Character Stats</h2>
+          <h2 className="text-xl font-bold text-yellow-400 mb-4">Upgrade Stats</h2>
 
           <p className="text-gray-300 mb-4">
-            Each level gives you <span className="text-blue-400 font-bold">5 stat points</span> to distribute among three main attributes.
+            Spend <span className="text-green-400 font-bold">Zen</span> to upgrade your character stats. Each upgrade increases the stat level by 1.
           </p>
 
           <div className="space-y-4">
             <div className="bg-gray-900/50 rounded p-3">
-              <h3 className="font-bold text-red-400 mb-2">Strength (STR)</h3>
-              <p className="text-gray-300 text-sm mb-2">Primary damage stat for all classes.</p>
+              <h3 className="font-bold text-red-400 mb-2">⚔️ DMG (Damage)</h3>
               <ul className="text-sm space-y-1">
-                <li><span className="text-gray-400">Min Damage:</span> <span className="text-white">STR × 1.1</span></li>
-                <li><span className="text-gray-400">Max Damage:</span> <span className="text-white">STR × 1.6</span></li>
-                <li><span className="text-gray-400">Critical Rate:</span> <span className="text-white">+1% per 200 STR</span></li>
+                <li><span className="text-gray-400">Min Damage:</span> <span className="text-white">+2 per level</span></li>
+                <li><span className="text-gray-400">Max Damage:</span> <span className="text-white">+3 per level</span></li>
               </ul>
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
-              <h3 className="font-bold text-blue-400 mb-2">Agility (AGI)</h3>
-              <p className="text-gray-300 text-sm mb-2">Defensive stat that also improves attack speed.</p>
+              <h3 className="font-bold text-blue-400 mb-2">🛡️ DEF (Defense)</h3>
               <ul className="text-sm space-y-1">
-                <li><span className="text-gray-400">Defense:</span> <span className="text-white">AGI × 0.5</span></li>
-                <li><span className="text-gray-400">Attack Speed:</span> <span className="text-white">AGI × 0.15</span></li>
-                <li><span className="text-gray-400">Defense Rate:</span> <span className="text-white">AGI × 0.3</span></li>
+                <li><span className="text-gray-400">Physical Defense:</span> <span className="text-white">+1 per level</span></li>
               </ul>
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
-              <h3 className="font-bold text-green-400 mb-2">Vitality (VIT)</h3>
-              <p className="text-gray-300 text-sm mb-2">Health and survivability stat.</p>
+              <h3 className="font-bold text-cyan-400 mb-2">💨 Speed (Attack Speed)</h3>
               <ul className="text-sm space-y-1">
-                <li><span className="text-gray-400">HP:</span> <span className="text-white">+5 HP per point</span></li>
-                <li><span className="text-gray-400">HP Recovery:</span> <span className="text-white">+1 per 8 VIT</span></li>
+                <li><span className="text-gray-400">Attack Speed:</span> <span className="text-white">+1 per level</span></li>
+                <li><span className="text-yellow-400">Maximum: 350</span> <span className="text-gray-500">(cannot upgrade beyond this)</span></li>
               </ul>
             </div>
+
+            <div className="bg-gray-900/50 rounded p-3">
+              <h3 className="font-bold text-green-400 mb-2">❤️ HP (Vitality)</h3>
+              <ul className="text-sm space-y-1">
+                <li><span className="text-gray-400">Max HP:</span> <span className="text-white">+10 HP per level</span></li>
+                <li><span className="text-gray-400">Base HP:</span> <span className="text-white">50</span></li>
+              </ul>
+            </div>
+
+            <div className="bg-gray-900/50 rounded p-3">
+              <h3 className="font-bold text-yellow-400 mb-2">💰 Zen% (Zen Bonus)</h3>
+              <ul className="text-sm space-y-1">
+                <li><span className="text-gray-400">Zen Drop Bonus:</span> <span className="text-white">+1% per level</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-900/30 rounded border border-blue-700">
+            <p className="text-sm text-blue-300">
+              <strong>Upgrade Cost:</strong> 50 × level^1.5 Zen per upgrade
+            </p>
           </div>
         </section>
 
@@ -167,42 +168,45 @@ export default function WikiPage() {
               <h3 className="font-bold text-orange-400 mb-2">Damage Calculation</h3>
               <div className="text-sm space-y-2">
                 <p><span className="text-gray-400">Base Damage:</span> <span className="text-white">Random between Min and Max damage</span></p>
-                <p><span className="text-gray-400">Final Damage:</span> <span className="text-white">Base - (Monster Defense / 4)</span></p>
-                <p><span className="text-gray-400">Critical Hit:</span> <span className="text-white">Base × 1.5</span></p>
-                <p><span className="text-gray-400">Excellent Hit:</span> <span className="text-white">Base × 2.0 (5% chance)</span></p>
+                <p><span className="text-gray-400">Final Damage:</span> <span className="text-white">Base - (Monster Defense × 0.3)</span></p>
+                <p><span className="text-gray-400">Minimum Damage:</span> <span className="text-white">1 (always deal at least 1 damage)</span></p>
               </div>
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
               <h3 className="font-bold text-cyan-400 mb-2">Critical Rate</h3>
               <p className="text-sm text-gray-300">
-                <span className="text-white font-mono">1% + (Level / 40) + (STR / 200) + Equipment Bonuses</span>
+                <span className="text-white font-mono">5% base + 1% per 50 character levels + Equipment Bonuses + Ascension</span>
               </p>
-              <p className="text-xs text-gray-500 mt-1">Maximum: 25%</p>
+              <p className="text-xs text-gray-500 mt-1">Maximum: 50%</p>
+              <p className="text-sm mt-2">
+                <span className="text-gray-400">Critical Damage:</span> <span className="text-white">150% (1.5x damage)</span>
+              </p>
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
               <h3 className="font-bold text-yellow-400 mb-2">Attack Speed</h3>
               <p className="text-sm text-gray-300">
-                Higher attack speed means faster combat ticks.
+                Higher attack speed means faster attacks.
               </p>
               <p className="text-sm mt-1">
-                <span className="text-gray-400">Formula:</span> <span className="text-white font-mono">AGI × 0.15 + Weapon Speed</span>
+                <span className="text-gray-400">Formula:</span> <span className="text-white font-mono">Speed Level + Weapon Attack Speed</span>
               </p>
+              <p className="text-xs text-yellow-400 mt-1">Maximum: 350 (hard cap)</p>
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
               <h3 className="font-bold text-red-400 mb-2">HP & Recovery</h3>
               <div className="text-sm space-y-1">
-                <p><span className="text-gray-400">Max HP:</span> <span className="text-white">100 + (VIT × 5) + (Level × 3)</span></p>
-                <p><span className="text-gray-400">HP Recovery:</span> <span className="text-white">3 + (VIT / 8) + (Level / 15)</span></p>
+                <p><span className="text-gray-400">Max HP:</span> <span className="text-white">50 + (HP Level × 10) + Ascension Bonus</span></p>
+                <p><span className="text-gray-400">HP Recovery:</span> <span className="text-white">5 + (HP Level / 5) per tick</span></p>
               </div>
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
               <h3 className="font-bold text-pink-400 mb-2">Life Steal</h3>
               <p className="text-sm text-gray-300">
-                Heals you for a percentage of damage dealt. Only available from item options.
+                Heals you for a percentage of damage dealt. Available from item options and Ascension.
               </p>
             </div>
 
@@ -212,6 +216,77 @@ export default function WikiPage() {
                 Returns a percentage of received damage back to the monster. Only available from item options.
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Ascension System */}
+        <section id="ascension" className="bg-gray-800/50 rounded-lg p-4 border border-purple-700">
+          <h2 className="text-xl font-bold text-purple-400 mb-4">⭐ Ascension System</h2>
+
+          <p className="text-gray-300 mb-4">
+            The Ascension system is a prestige mechanic. Each time you <span className="text-yellow-400 font-bold">reset at level 400</span>,
+            you earn <span className="text-purple-400 font-bold">+1 Ascension Point</span> to spend on permanent bonuses.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="text-left py-2 text-gray-400">Skill</th>
+                  <th className="text-left py-2 text-gray-400">Bonus per Point</th>
+                  <th className="text-left py-2 text-gray-400">Description</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                <tr>
+                  <td className="py-2 text-red-400">⚔️ Damage</td>
+                  <td className="py-2">+2% DMG</td>
+                  <td className="py-2 text-gray-400">Increases all damage dealt</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-yellow-400">💥 Critical</td>
+                  <td className="py-2">+1% Crit</td>
+                  <td className="py-2 text-gray-400">Increases critical hit chance</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-green-400">❤️ Health</td>
+                  <td className="py-2">+5% HP</td>
+                  <td className="py-2 text-gray-400">Increases maximum HP</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-pink-400">🩸 Life Steal</td>
+                  <td className="py-2">+0.5% LS</td>
+                  <td className="py-2 text-gray-400">Heal % of damage dealt</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-amber-400">💰 Zen</td>
+                  <td className="py-2">+3% Zen</td>
+                  <td className="py-2 text-gray-400">Increases zen drops</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-cyan-400">📈 Experience</td>
+                  <td className="py-2">+2% EXP</td>
+                  <td className="py-2 text-gray-400">Increases experience gain</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-lime-400">🧪 Poison</td>
+                  <td className="py-2">+0.5% chance</td>
+                  <td className="py-2 text-gray-400">Chance to poison (deals 10% of monster&apos;s current HP)</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-indigo-400">✨ Excellent</td>
+                  <td className="py-2">+0.25% chance</td>
+                  <td className="py-2 text-gray-400">Chance for excellent damage (2x damage)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 p-3 bg-purple-900/30 rounded border border-purple-700">
+            <p className="text-sm text-purple-300">
+              <strong>How to access:</strong> Click the &quot;⭐ Ascension&quot; button in the top navigation bar (desktop)
+              or find it in the Stats tab (mobile).
+            </p>
           </div>
         </section>
 
@@ -279,7 +354,6 @@ export default function WikiPage() {
                 <tr className="border-b border-gray-700">
                   <th className="text-left py-2 text-gray-400">Option</th>
                   <th className="text-left py-2 text-gray-400">Value Range</th>
-                  <th className="text-left py-2 text-gray-400">Drop Rate</th>
                   <th className="text-left py-2 text-gray-400">Description</th>
                 </tr>
               </thead>
@@ -287,73 +361,61 @@ export default function WikiPage() {
                 <tr>
                   <td className="py-2 text-cyan-400">Critical Rate</td>
                   <td className="py-2">+1% to +5%</td>
-                  <td className="py-2 text-gray-500">20%</td>
                   <td className="py-2 text-gray-400">Increases critical hit chance</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-orange-400">Attack Speed</td>
                   <td className="py-2">+5% to +15%</td>
-                  <td className="py-2 text-gray-500">15%</td>
                   <td className="py-2 text-gray-400">Faster attack rate</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-pink-400">Life Steal</td>
                   <td className="py-2">+1% to +5%</td>
-                  <td className="py-2 text-gray-500">10%</td>
                   <td className="py-2 text-gray-400">Heal % of damage dealt</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-red-400">Extra Damage</td>
                   <td className="py-2">+5% to +15%</td>
-                  <td className="py-2 text-gray-500">15%</td>
                   <td className="py-2 text-gray-400">Increases all damage</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-blue-400">Extra Defense</td>
                   <td className="py-2">+5% to +15%</td>
-                  <td className="py-2 text-gray-500">15%</td>
                   <td className="py-2 text-gray-400">Increases total defense</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-purple-400">EXP Bonus</td>
                   <td className="py-2">+5% to +20%</td>
-                  <td className="py-2 text-gray-500">10%</td>
                   <td className="py-2 text-gray-400">More experience per kill</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-green-400">Zen Bonus</td>
                   <td className="py-2">+10% to +30%</td>
-                  <td className="py-2 text-gray-500">10%</td>
                   <td className="py-2 text-gray-400">More gold per kill</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-yellow-400">Excellent Damage</td>
                   <td className="py-2">+10% to +30%</td>
-                  <td className="py-2 text-gray-500">5%</td>
                   <td className="py-2 text-gray-400">Bonus on excellent hits</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-red-300">Max HP</td>
                   <td className="py-2">+5% to +20%</td>
-                  <td className="py-2 text-gray-500">10%</td>
                   <td className="py-2 text-gray-400">Increases maximum HP</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-amber-400">HP Recovery</td>
                   <td className="py-2">+10% to +50%</td>
-                  <td className="py-2 text-gray-500">10%</td>
                   <td className="py-2 text-gray-400">Faster HP regeneration</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-gray-300">Damage Decrease</td>
                   <td className="py-2">+3% to +10%</td>
-                  <td className="py-2 text-gray-500">10%</td>
                   <td className="py-2 text-gray-400">Reduces incoming damage</td>
                 </tr>
                 <tr>
                   <td className="py-2 text-purple-300">Reflect Damage</td>
                   <td className="py-2">+3% to +10%</td>
-                  <td className="py-2 text-gray-500">5%</td>
                   <td className="py-2 text-gray-400">Returns damage to attacker</td>
                 </tr>
               </tbody>
@@ -480,14 +542,25 @@ export default function WikiPage() {
             </div>
 
             <div className="bg-gray-900/50 rounded p-3">
-              <h3 className="font-bold text-purple-400 mb-2">Jewel Drops</h3>
+              <h3 className="font-bold text-purple-400 mb-2">Jewel & Material Drops</h3>
               <p className="text-sm text-gray-300 mb-2">
                 Only from monsters <span className="text-yellow-400 font-bold">level 41+</span>
               </p>
               <ul className="text-sm space-y-1">
-                <li><span className="text-purple-300">💎 Jewel of Bless:</span> <span className="text-white">1%</span> per kill</li>
-                <li><span className="text-pink-400">💎 Jewel of Soul:</span> <span className="text-white">1%</span> per kill</li>
-                <li><span className="text-orange-400">💎 Jewel of Life:</span> <span className="text-white">1%</span> per kill</li>
+                <li><span className="text-purple-300">💎 Jewel of Bless:</span> <span className="text-white">0.8%</span></li>
+                <li><span className="text-pink-400">💎 Jewel of Soul:</span> <span className="text-white">0.8%</span></li>
+                <li><span className="text-orange-400">💎 Jewel of Life:</span> <span className="text-white">0.8%</span></li>
+                <li><span className="text-yellow-400">💎 Jewel of Chaos:</span> <span className="text-white">0.4%</span></li>
+                <li><span className="text-cyan-400">📜 Scroll of Archangel:</span> <span className="text-white">0.8%</span></li>
+                <li><span className="text-red-400">🦴 Blood Bone:</span> <span className="text-white">0.8%</span></li>
+                <li><span className="text-amber-400">🗝️ Devil&apos;s Key:</span> <span className="text-white">0.8%</span></li>
+                <li><span className="text-green-400">👁️ Devil&apos;s Eye:</span> <span className="text-white">0.8%</span></li>
+              </ul>
+              <p className="text-sm text-gray-300 mt-2">
+                From monsters <span className="text-yellow-400 font-bold">level 81+</span>:
+              </p>
+              <ul className="text-sm space-y-1">
+                <li><span className="text-emerald-400">🪶 Feather:</span> <span className="text-white">0.1%</span></li>
               </ul>
             </div>
 
@@ -497,7 +570,10 @@ export default function WikiPage() {
                 EXP and Zen gained scales with monster level. Higher level monsters give more rewards.
               </p>
               <p className="text-sm mt-2">
-                <span className="text-gray-400">Level up requirement:</span> <span className="text-white">Level × 100 EXP</span>
+                <span className="text-gray-400">Level up requirement:</span> <span className="text-white">Level² × 5 EXP</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Example: Level 100 needs 50,000 EXP, Level 400 needs 800,000 EXP
               </p>
             </div>
           </div>
@@ -508,23 +584,27 @@ export default function WikiPage() {
           <h2 className="text-xl font-bold text-yellow-400 mb-4">Locations</h2>
 
           <p className="text-gray-300 mb-4">
-            Travel between locations to find monsters appropriate for your level.
+            Travel between locations to find monsters appropriate for your level. Max level is 400.
           </p>
 
           <div className="grid gap-2 text-sm">
             {[
-              { name: 'Newbie Valley', levels: '1-10', color: 'green' },
-              { name: 'Forest Entrance', levels: '11-20', color: 'green' },
-              { name: 'Mountain Pass', levels: '21-30', color: 'blue' },
-              { name: 'Dark Forest', levels: '31-40', color: 'blue' },
-              { name: 'Haunted Cemetery', levels: '41-50', color: 'purple' },
-              { name: 'Ice Caverns', levels: '51-60', color: 'purple' },
-              { name: 'Cursed Lands', levels: '61-80', color: 'orange' },
-              { name: 'Hell Grounds', levels: '81-100', color: 'red' },
-              { name: 'End Game', levels: '101-180', color: 'yellow' },
+              { name: '🌿 Newbie Valley', levels: '1-10', color: 'text-green-400' },
+              { name: '🌲 Forest Entrance', levels: '11-20', color: 'text-green-400' },
+              { name: '⛰️ Mountain Pass', levels: '21-30', color: 'text-blue-400' },
+              { name: '🌑 Dark Forest', levels: '31-40', color: 'text-blue-400' },
+              { name: '⚰️ Haunted Cemetery', levels: '41-50', color: 'text-purple-400' },
+              { name: '❄️ Ice Caverns', levels: '51-60', color: 'text-purple-400' },
+              { name: '💀 Cursed Lands', levels: '61-80', color: 'text-orange-400' },
+              { name: '🔥 Hell Grounds', levels: '81-100', color: 'text-red-400' },
+              { name: '⚔️ End Game', levels: '101-180', color: 'text-yellow-400' },
+              { name: '🌋 Volcanic Crater', levels: '181-210', color: 'text-orange-500' },
+              { name: '🕳️ Abyss Ruins', levels: '211-240', color: 'text-purple-500' },
+              { name: '✨ Celestial Rift', levels: '241-280', color: 'text-cyan-400' },
+              { name: '👑 Chaos Throne', levels: '281-400', color: 'text-yellow-500' },
             ].map((loc) => (
               <div key={loc.name} className="flex justify-between items-center bg-gray-900/50 rounded p-2">
-                <span className={`text-${loc.color}-400 font-medium`}>{loc.name}</span>
+                <span className={`${loc.color} font-medium`}>{loc.name}</span>
                 <span className="text-gray-400">Lv. {loc.levels}</span>
               </div>
             ))}
@@ -555,77 +635,37 @@ export default function WikiPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-green-400">✓</span>
-                <span>All stats reset to base (25 each)</span>
+                <span>All upgrade stats reset to level 1</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-green-400">✓</span>
                 <span>Reset count increases by 1</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-yellow-400 font-bold">★</span>
-                <span><strong>You receive 500 bonus stat points!</strong></span>
+                <span className="text-purple-400 font-bold">⭐</span>
+                <span><strong>You receive +1 Ascension Point!</strong></span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-green-400">✓</span>
                 <span>Inventory and equipment are <strong>kept!</strong></span>
               </li>
+              <li className="flex items-start gap-2">
+                <span className="text-green-400">✓</span>
+                <span>All Ascension bonuses are <strong>kept!</strong></span>
+              </li>
             </ul>
 
-            <div className="mt-4 p-3 bg-green-900/30 rounded border border-green-700">
-              <p className="text-sm text-green-300">
-                <strong>Reset Bonus:</strong> Each reset gives you <span className="text-yellow-400 font-bold">500 free stat points</span> to distribute!
-                This lets you build a stronger character each time.
-              </p>
-            </div>
-
-            <div className="mt-3 p-3 bg-purple-900/30 rounded border border-purple-700">
+            <div className="mt-4 p-3 bg-purple-900/30 rounded border border-purple-700">
               <p className="text-sm text-purple-300">
-                <strong>Why reset?</strong> Resets are tracked on the ranking board.
-                More resets = more prestige and stronger builds with bonus points!
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Stat Rebuild */}
-        <section id="rebuild" className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-          <h2 className="text-xl font-bold text-yellow-400 mb-4">Stat Rebuild</h2>
-
-          <div className="bg-gray-900/50 rounded p-4">
-            <p className="text-gray-300 mb-4">
-              Made a mistake with your stat points? Use the <span className="text-amber-400 font-bold">Rebuild</span> feature to reset and redistribute them!
-            </p>
-
-            <div className="bg-amber-900/30 rounded p-4 border border-amber-700 mb-4">
-              <h3 className="font-bold text-amber-400 mb-2">Cost: 1,000,000 Zen</h3>
-              <p className="text-sm text-gray-300">
-                You need at least 1 million Zen to use this feature.
+                <strong>Ascension Points:</strong> Spend these in the Ascension Tree to permanently
+                boost your character with bonuses like +2% damage, +1% crit, +5% HP, and more!
               </p>
             </div>
 
-            <h3 className="font-bold text-purple-400 mb-2">What happens on rebuild:</h3>
-            <ul className="text-sm space-y-2 text-gray-300">
-              <li className="flex items-start gap-2">
-                <span className="text-green-400">✓</span>
-                <span>STR, AGI, and VIT reset to base value (25 each)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-400">✓</span>
-                <span>All spent stat points are returned to you</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-400">-</span>
-                <span>1,000,000 Zen is deducted from your account</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-400">•</span>
-                <span>Level, EXP, equipment, and inventory remain unchanged</span>
-              </li>
-            </ul>
-
-            <div className="mt-4 p-3 bg-blue-900/30 rounded border border-blue-700">
-              <p className="text-sm text-blue-300">
-                <strong>How to use:</strong> Find the &quot;Rebuild (1M Zen)&quot; button in the Stats section, below the stat allocation buttons.
+            <div className="mt-3 p-3 bg-green-900/30 rounded border border-green-700">
+              <p className="text-sm text-green-300">
+                <strong>Reset Bonuses:</strong> Each reset also gives <span className="text-yellow-400">+0.1% EXP</span> and
+                <span className="text-yellow-400"> +0.1% Zen</span> permanent bonus (stacks with each reset).
               </p>
             </div>
           </div>

@@ -54,6 +54,32 @@ export const MONSTERS: Monster[] = [
   { id: 42, name: 'Zombie Fighter', level: 150, hp: 206850, minDamage: 1848, maxDamage: 2082, defense: 1500, exp: 15000, zen: 7500 },
   { id: 43, name: 'Gray Witch Queen', level: 170, hp: 352800, minDamage: 2974, maxDamage: 3132, defense: 1600, exp: 19000, zen: 9500 },
   { id: 44, name: 'Magma Ogre', level: 179, hp: 970200, minDamage: 3578, maxDamage: 3736, defense: 2048, exp: 20800, zen: 10400 },
+
+  // Volcanic Crater (185-210)
+  { id: 45, name: 'Flame Gargoyle', level: 185, hp: 1150000, minDamage: 3800, maxDamage: 3950, defense: 2150, exp: 22000, zen: 11000 },
+  { id: 46, name: 'Lava Beast', level: 190, hp: 1350000, minDamage: 4050, maxDamage: 4200, defense: 2250, exp: 23500, zen: 11750 },
+  { id: 47, name: 'Infernal Knight', level: 195, hp: 1600000, minDamage: 4300, maxDamage: 4500, defense: 2350, exp: 25500, zen: 12750 },
+  { id: 48, name: 'Volcano Cyclops', level: 200, hp: 1900000, minDamage: 4600, maxDamage: 4800, defense: 2500, exp: 28000, zen: 14000 },
+  { id: 49, name: 'Magma Titan', level: 210, hp: 2400000, minDamage: 5000, maxDamage: 5250, defense: 2700, exp: 32000, zen: 16000 },
+
+  // Abyss Ruins (210-240)
+  { id: 50, name: 'Abyss Mage', level: 215, hp: 2800000, minDamage: 5300, maxDamage: 5600, defense: 2900, exp: 35000, zen: 17500 },
+  { id: 51, name: 'Void Reaper', level: 220, hp: 3300000, minDamage: 5700, maxDamage: 6000, defense: 3100, exp: 38000, zen: 19000 },
+  { id: 52, name: 'Dark Colossus', level: 225, hp: 3900000, minDamage: 6100, maxDamage: 6500, defense: 3350, exp: 42000, zen: 21000 },
+  { id: 53, name: 'Abyss Dragon', level: 235, hp: 4700000, minDamage: 6600, maxDamage: 7000, defense: 3600, exp: 47000, zen: 23500 },
+  { id: 54, name: 'Lord of the Void', level: 240, hp: 5600000, minDamage: 7100, maxDamage: 7600, defense: 3900, exp: 52000, zen: 26000 },
+
+  // Celestial Rift (240-280)
+  { id: 55, name: 'Celestial Guard', level: 245, hp: 6500000, minDamage: 7800, maxDamage: 8400, defense: 4200, exp: 58000, zen: 29000 },
+  { id: 56, name: 'Astral Serpent', level: 250, hp: 7600000, minDamage: 8600, maxDamage: 9200, defense: 4500, exp: 65000, zen: 32500 },
+  { id: 57, name: 'Star Titan', level: 260, hp: 9200000, minDamage: 9600, maxDamage: 10200, defense: 5000, exp: 75000, zen: 37500 },
+  { id: 58, name: 'Rift Archangel', level: 270, hp: 11200000, minDamage: 10800, maxDamage: 11500, defense: 5600, exp: 90000, zen: 45000 },
+  { id: 59, name: 'Celestial Emperor', level: 280, hp: 14000000, minDamage: 12500, maxDamage: 13200, defense: 6200, exp: 110000, zen: 55000 },
+
+  // Chaos Throne (280-300+)
+  { id: 60, name: 'Chaos Warlord', level: 285, hp: 16500000, minDamage: 14000, maxDamage: 15000, defense: 7000, exp: 130000, zen: 65000 },
+  { id: 61, name: 'Chaos Dragon', level: 290, hp: 19500000, minDamage: 16000, maxDamage: 17000, defense: 7800, exp: 155000, zen: 77500 },
+  { id: 62, name: 'God of Destruction', level: 300, hp: 25000000, minDamage: 19000, maxDamage: 20500, defense: 9000, exp: 200000, zen: 100000 },
 ];
 
 export function getMonstersByLevelRange(minLevel: number, maxLevel: number): Monster[] {

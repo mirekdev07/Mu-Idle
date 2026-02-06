@@ -25,6 +25,7 @@ interface CharacterData {
   defLevel: number;
   speedLevel: number;
   hpLevel: number;
+  zenLevel: number;
   currentHp: number | null;
   resetCount: number;
   monstersKilled: number;
@@ -42,6 +43,17 @@ interface CharacterData {
   devilSquareTicket: number;
   bloodCastleEntriesToday: number;
   devilSquareEntriesToday: number;
+  burstCooldownEnd: string | null;
+  // Ascension system
+  ascensionPoints: number;
+  ascDamage: number;
+  ascCritical: number;
+  ascHealth: number;
+  ascLifeSteal: number;
+  ascZen: number;
+  ascExp: number;
+  ascPoison: number;
+  ascExcellent: number;
 }
 
 interface UpgradeCosts {
@@ -49,6 +61,7 @@ interface UpgradeCosts {
   def: string;
   speed: string;
   hp: string;
+  zen: string;
 }
 
 interface GameStats {
@@ -58,11 +71,91 @@ interface GameStats {
   attackSpeed: number;
   maxHp: number;
   criticalRate: number;
+  excellentChance: number;
+  poisonChance: number;
 }
 
 interface GameData {
   character: CharacterData;
   stats: GameStats;
+}
+
+// Local upgrade cost calculation (mirrors server logic)
+function calculateUpgradeCost(currentLevel: number, amount: number): bigint {
+  const BASE_COST = 50n;
+  let totalCost = 0n;
+
+  for (let i = 0; i < amount; i++) {
+    const level = currentLevel + i;
+    const cost = BASE_COST * BigInt(Math.floor(Math.pow(level, 1.5)));
+    totalCost += cost;
+  }
+
+  return totalCost;
+}
+
+function calculateMaxUpgrades(currentLevel: number, availableZen: bigint): number {
+  let upgrades = 0;
+  let totalCost = 0n;
+
+  while (upgrades < 10000) {
+    const nextCost = calculateUpgradeCost(currentLevel + upgrades, 1);
+    if (totalCost + nextCost > availableZen) break;
+    totalCost += nextCost;
+    upgrades++;
+  }
+
+  return upgrades;
+}
+
+// Format large numbers with alphabet notation (idle game style)
+// K, M, B, T, then a-z, aa-az, ba-bz, etc.
+function formatNumber(num: bigint | number): string {
+  const n = typeof num === 'bigint' ? Number(num) : num;
+
+  if (n < 1_000) return Math.floor(n).toString();
+  if (n < 1_000_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  if (n < 1_000_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n < 1_000_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B';
+  if (n < 1_000_000_000_000_000) return (n / 1_000_000_000_000).toFixed(1).replace(/\.0$/, '') + 'T';
+
+  // After T (10^15+), use alphabet notation: a, b, c... aa, ab...
+  // Each letter represents x1000
+  // a = 10^15, b = 10^18, c = 10^21... z = 10^90
+  // aa = 10^93, ab = 10^96...
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+  let exp = Math.floor(Math.log10(n));
+
+  // Starting from 10^15 (a), each suffix is 3 more (x1000)
+  // suffix index: 0=a (10^15), 1=b (10^18), 25=z (10^90), 26=aa (10^93)...
+  const suffixIndex = Math.floor((exp - 15) / 3);
+  const divisorExp = 15 + suffixIndex * 3;
+  const divisor = Math.pow(10, divisorExp);
+  const value = n / divisor;
+
+  // Generate suffix from index
+  let suffix = '';
+  let idx = suffixIndex;
+  if (idx < 26) {
+    // Single letter: a-z
+    suffix = alphabet[idx];
+  } else {
+    // Multiple letters: aa, ab... ba, bb... aaa, aab...
+    idx -= 26; // Now 0 = aa
+    const letters: string[] = [];
+    do {
+      letters.unshift(alphabet[idx % 26]);
+      idx = Math.floor(idx / 26) - 1;
+    } while (idx >= 0);
+    // Prefix with 'a' to make aa, ab format
+    if (letters.length === 1) {
+      suffix = 'a' + letters[0];
+    } else {
+      suffix = letters.join('');
+    }
+  }
+
+  return value.toFixed(1).replace(/\.0$/, '') + suffix;
 }
 
 export default function HomePage() {
@@ -77,7 +170,7 @@ export default function HomePage() {
   const [lastExpUpdate, setLastExpUpdate] = useState<{ exp: bigint; zen: bigint; time: number } | null>(null);
   const [offlineRewards, setOfflineRewards] = useState<{ exp: number; zen: number; seconds: number } | null>(null);
   const [craftingItem, setCraftingItem] = useState<{ item: Item; slotIndex: number } | null>(null);
-  const [upgradeCosts, setUpgradeCosts] = useState<UpgradeCosts>({ dmg: '0', def: '0', speed: '0', hp: '0' });
+  const [upgradeCosts, setUpgradeCosts] = useState<UpgradeCosts>({ dmg: '0', def: '0', speed: '0', hp: '0', zen: '0' });
   const [upgradeMultiplier, setUpgradeMultiplier] = useState<1 | 5 | 10 | 100 | 'max'>(1);
 
   const {
@@ -100,6 +193,9 @@ export default function HomePage() {
 
   // Mobile menu dropdown
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Ascension panel visibility
+  const [showAscensionPanel, setShowAscensionPanel] = useState(false);
 
   // Crafting panel ref for mobile scroll
   const craftingPanelRef = useRef<HTMLDivElement>(null);
@@ -235,7 +331,7 @@ export default function HomePage() {
     if (!gameData) return;
 
     const newExp = BigInt(gameData.character.experience) + exp;
-    const newZen = BigInt(gameData.character.zen) + zen;
+    let newZen = BigInt(gameData.character.zen) + zen;
 
     // Track EXP and Zen per second
     const now = Date.now();
@@ -246,29 +342,34 @@ export default function HomePage() {
         const zenDiff = Number(newZen - lastExpUpdate.zen);
         const newExpPerSec = expDiff / timeDiff;
         const newZenPerSec = zenDiff / timeDiff;
-        // Smooth average
-        setExpPerSecond(prev => prev === 0 ? newExpPerSec : (prev * 0.7 + newExpPerSec * 0.3));
-        setZenPerSecond(prev => prev === 0 ? newZenPerSec : (prev * 0.7 + newZenPerSec * 0.3));
+        // Faster smoothing (50/50) for quicker convergence
+        setExpPerSecond(prev => prev === 0 ? newExpPerSec : (prev * 0.5 + newExpPerSec * 0.5));
+        setZenPerSecond(prev => prev === 0 ? newZenPerSec : (prev * 0.5 + newZenPerSec * 0.5));
       }
     }
     setLastExpUpdate({ exp: newExp, zen: newZen, time: now });
 
-    // Check for level up (simple formula: level * 100 exp needed)
+    // Check for level up (quadratic formula: level² × 5 exp needed)
     // Max level is 400
     const MAX_LEVEL = 400;
     let newLevel = gameData.character.level;
     let remainingExp = newExp;
-    let leveledUp = false;
+    let levelsGained = 0;
 
-    while (remainingExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
-      remainingExp -= BigInt(newLevel * 100);
+    while (remainingExp >= BigInt(newLevel * newLevel * 5) && newLevel < MAX_LEVEL) {
+      remainingExp -= BigInt(newLevel * newLevel * 5);
       newLevel++;
-      leveledUp = true;
+      levelsGained++;
     }
 
     // At max level, cap experience at 0 (no more exp needed)
     if (newLevel >= MAX_LEVEL) {
       remainingExp = 0n;
+    }
+
+    // Add 50,000 zen per level gained
+    if (levelsGained > 0) {
+      newZen = newZen + BigInt(50000 * levelsGained);
     }
 
     const newCharacterData = {
@@ -285,7 +386,7 @@ export default function HomePage() {
     });
 
     // On level up: save progress
-    if (leveledUp) {
+    if (levelsGained > 0) {
       try {
         await fetch('/api/game/progress', {
           method: 'POST',
@@ -345,6 +446,8 @@ export default function HomePage() {
             attackSpeed: data.stats.attackSpeed,
             maxHp: data.stats.maxHp,
             criticalRate: data.stats.criticalRate,
+            excellentChance: data.stats.excellentChance ?? 5,
+            poisonChance: data.stats.poisonChance ?? 0,
           },
         });
       }
@@ -452,7 +555,7 @@ export default function HomePage() {
     }
   };
 
-  const handleUpgradeStat = async (statName: 'dmg' | 'def' | 'speed' | 'hp') => {
+  const handleUpgradeStat = async (statName: 'dmg' | 'def' | 'speed' | 'hp' | 'zen') => {
     if (!gameData) return;
 
     const amount = upgradeMultiplier === 'max' ? 'max' : upgradeMultiplier;
@@ -476,6 +579,7 @@ export default function HomePage() {
           def: 'defLevel',
           speed: 'speedLevel',
           hp: 'hpLevel',
+          zen: 'zenLevel',
         };
 
         setGameData({
@@ -493,6 +597,8 @@ export default function HomePage() {
             attackSpeed: data.stats.attackSpeed,
             maxHp: data.stats.maxHp,
             criticalRate: data.stats.criticalRate,
+            excellentChance: data.stats.excellentChance ?? gameData.stats.excellentChance,
+            poisonChance: data.stats.poisonChance ?? gameData.stats.poisonChance,
           },
         });
 
@@ -546,6 +652,29 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error('Reset failed:', err);
+    }
+  };
+
+  const handleAscensionUpgrade = async (skill: string) => {
+    if (!gameData || gameData.character.ascensionPoints <= 0) return;
+
+    try {
+      const response = await fetch('/api/character/ascension', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: gameData.character.id,
+          skill,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Reload all game data to get updated stats
+        await loadGameData();
+      }
+    } catch (err) {
+      console.error('Ascension upgrade failed:', err);
     }
   };
 
@@ -668,12 +797,12 @@ export default function HomePage() {
     minDamage: stats.minDamage + (equipmentBonuses.damage_min || 0),
     maxDamage: stats.maxDamage + (equipmentBonuses.damage_max || 0),
     defense: stats.physicalDefense + (equipmentBonuses.defense || 0),
-    attackSpeed: Math.min(200, stats.attackSpeed + (equipmentBonuses.attack_speed || 0)),
+    attackSpeed: Math.min(350, stats.attackSpeed + (equipmentBonuses.attack_speed || 0)),
   };
 
   // EXP calculation helper
   const currentExp = BigInt(character.experience);
-  const expNeeded = BigInt(character.level * 100);
+  const expNeeded = BigInt(character.level * character.level * 5);
   const expPercentage = Number((currentExp * 100n) / expNeeded);
   const expRemaining = Number(expNeeded - currentExp);
   const timeToLevel = expPerSecond > 0 ? Math.ceil(expRemaining / expPerSecond) : null;
@@ -699,6 +828,17 @@ export default function HomePage() {
             </div>
             {/* Desktop Navigation */}
             <div className="hidden sm:flex items-center gap-2">
+              <button
+                onClick={() => setShowAscensionPanel(true)}
+                className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm flex items-center gap-1"
+              >
+                ⭐ Ascension
+                {character.ascensionPoints > 0 && (
+                  <span className="bg-yellow-500 text-black text-xs px-1.5 rounded-full font-bold">
+                    {character.ascensionPoints}
+                  </span>
+                )}
+              </button>
               <Link href="/events" className="px-3 py-1 bg-orange-700 rounded hover:bg-orange-600 text-sm">
                 Events
               </Link>
@@ -725,122 +865,10 @@ export default function HomePage() {
               </button>
             </div>
 
-            {/* Mobile Menu Button */}
-            <div className="sm:hidden relative">
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                {mobileMenuOpen ? (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
-              </button>
-
-              {/* Mobile Dropdown Menu */}
-              {mobileMenuOpen && (
-                <>
-                  {/* Backdrop */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setMobileMenuOpen(false)}
-                  />
-                  {/* Menu */}
-                  <div className="absolute right-0 top-12 z-50 w-56 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="p-2 border-b border-gray-700">
-                      <div className="text-xs text-gray-400 px-3 py-1">Menu</div>
-                    </div>
-                    <div className="py-2">
-                      <Link
-                        href="/events"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-orange-700/30 transition-colors"
-                      >
-                        <span className="text-xl">🏰</span>
-                        <div>
-                          <div className="font-medium text-orange-400">Events</div>
-                          <div className="text-xs text-gray-400">Blood Castle & Devil Square</div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/chaos-machine"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-purple-700/30 transition-colors"
-                      >
-                        <span className="text-xl">🔮</span>
-                        <div>
-                          <div className="font-medium text-purple-400">Chaos Machine</div>
-                          <div className="text-xs text-gray-400">Craft items & tickets</div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/vault"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-amber-700/30 transition-colors"
-                      >
-                        <span className="text-xl">🏦</span>
-                        <div>
-                          <div className="font-medium text-amber-400">Vault</div>
-                          <div className="text-xs text-gray-400">Store your items</div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/characters"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors"
-                      >
-                        <span className="text-xl">👤</span>
-                        <div>
-                          <div className="font-medium">Characters</div>
-                          <div className="text-xs text-gray-400">Manage your heroes</div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/wiki"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors"
-                      >
-                        <span className="text-xl">📖</span>
-                        <div>
-                          <div className="font-medium">Wiki</div>
-                          <div className="text-xs text-gray-400">Game guide & info</div>
-                        </div>
-                      </Link>
-                      <Link
-                        href="/ranking"
-                        onClick={() => setMobileMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors"
-                      >
-                        <span className="text-xl">🏆</span>
-                        <div>
-                          <div className="font-medium">Ranking</div>
-                          <div className="text-xs text-gray-400">Top players</div>
-                        </div>
-                      </Link>
-                    </div>
-                    <div className="p-2 border-t border-gray-700">
-                      <button
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          signOut({ callbackUrl: '/login' });
-                        }}
-                        className="flex items-center gap-3 w-full px-4 py-3 hover:bg-red-700/30 transition-colors rounded-lg"
-                      >
-                        <span className="text-xl">🚪</span>
-                        <div>
-                          <div className="font-medium text-red-400">Logout</div>
-                          <div className="text-xs text-gray-400">Sign out of account</div>
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
+            {/* Mobile Menu Button - hidden since menu is in bottom nav */}
+            <div className="sm:hidden">
+              {/* This space can show character name on mobile */}
+              <span className="text-sm text-gray-400">{character.name}</span>
             </div>
           </div>
 
@@ -880,33 +908,143 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Mobile Tab Navigation */}
-      <nav className="lg:hidden sticky top-[88px] z-20 bg-gray-800 border-b border-gray-700">
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-30">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Menu Panel */}
+          <div className="absolute bottom-16 left-0 right-0 bg-gray-800 border-t border-gray-700 rounded-t-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-200">
+            <div className="p-3 border-b border-gray-700">
+              <div className="text-xs text-gray-400 font-medium">Navigation</div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 p-3">
+              <Link
+                href="/events"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-orange-900/30 hover:bg-orange-700/40 rounded-xl transition-colors border border-orange-700/30"
+              >
+                <span className="text-2xl">🏰</span>
+                <div>
+                  <div className="font-medium text-orange-400">Events</div>
+                  <div className="text-[10px] text-gray-400">BC & DS</div>
+                </div>
+              </Link>
+              <Link
+                href="/chaos-machine"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-purple-900/30 hover:bg-purple-700/40 rounded-xl transition-colors border border-purple-700/30"
+              >
+                <span className="text-2xl">🔮</span>
+                <div>
+                  <div className="font-medium text-purple-400">Chaos</div>
+                  <div className="text-[10px] text-gray-400">Crafting</div>
+                </div>
+              </Link>
+              <Link
+                href="/vault"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-amber-900/30 hover:bg-amber-700/40 rounded-xl transition-colors border border-amber-700/30"
+              >
+                <span className="text-2xl">🏦</span>
+                <div>
+                  <div className="font-medium text-amber-400">Vault</div>
+                  <div className="text-[10px] text-gray-400">Storage</div>
+                </div>
+              </Link>
+              <Link
+                href="/characters"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-gray-700/50 hover:bg-gray-600/50 rounded-xl transition-colors border border-gray-600/30"
+              >
+                <span className="text-2xl">👤</span>
+                <div>
+                  <div className="font-medium">Characters</div>
+                  <div className="text-[10px] text-gray-400">Heroes</div>
+                </div>
+              </Link>
+              <Link
+                href="/wiki"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-gray-700/50 hover:bg-gray-600/50 rounded-xl transition-colors border border-gray-600/30"
+              >
+                <span className="text-2xl">📖</span>
+                <div>
+                  <div className="font-medium">Wiki</div>
+                  <div className="text-[10px] text-gray-400">Guide</div>
+                </div>
+              </Link>
+              <Link
+                href="/ranking"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-gray-700/50 hover:bg-gray-600/50 rounded-xl transition-colors border border-gray-600/30"
+              >
+                <span className="text-2xl">🏆</span>
+                <div>
+                  <div className="font-medium">Ranking</div>
+                  <div className="text-[10px] text-gray-400">Top 50</div>
+                </div>
+              </Link>
+            </div>
+            <div className="p-3 border-t border-gray-700">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  signOut({ callbackUrl: '/login' });
+                }}
+                className="flex items-center justify-center gap-2 w-full p-3 bg-red-900/30 hover:bg-red-700/40 rounded-xl transition-colors border border-red-700/30"
+              >
+                <span className="text-xl">🚪</span>
+                <span className="font-medium text-red-400">Logout</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Tab Navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-900 border-t border-gray-700 safe-area-bottom">
         <div className="flex">
           {[
-            { id: 'hunt', label: '⚔️ Hunt', icon: '⚔️' },
-            { id: 'character', label: '👤 Stats', icon: '👤' },
-            { id: 'inventory', label: '🎒 Items', icon: '🎒' },
+            { id: 'hunt', label: 'Hunt', icon: '⚔️' },
+            { id: 'character', label: 'Stats', icon: '👤' },
+            { id: 'inventory', label: 'Items', icon: '🎒' },
+            { id: 'menu', label: 'Menu', icon: '☰' },
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'text-yellow-400 border-b-2 border-yellow-400 bg-gray-700/50'
-                  : 'text-gray-400 hover:text-gray-200'
+              onClick={() => {
+                if (tab.id === 'menu') {
+                  setMobileMenuOpen(!mobileMenuOpen);
+                } else {
+                  setActiveTab(tab.id as typeof activeTab);
+                  setMobileMenuOpen(false);
+                }
+              }}
+              className={`flex-1 py-3 flex flex-col items-center gap-0.5 text-xs font-medium transition-colors ${
+                tab.id === 'menu'
+                  ? mobileMenuOpen
+                    ? 'text-yellow-400 bg-gray-800'
+                    : 'text-gray-400'
+                  : activeTab === tab.id
+                  ? 'text-yellow-400 bg-gray-800'
+                  : 'text-gray-400'
               }`}
             >
-              {tab.label}
+              <span className="text-lg">{tab.icon}</span>
+              <span>{tab.label}</span>
             </button>
           ))}
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto p-2 lg:p-4">
+      <main className="max-w-7xl mx-auto p-2 lg:p-4 pb-20 lg:pb-4">
         {/* Desktop Layout - Grid */}
-        <div className="hidden lg:grid lg:grid-cols-4 gap-4">
+        <div className="hidden lg:grid lg:grid-cols-[1fr_1.4fr_1fr] gap-4">
           {/* Character Panel - Desktop */}
           <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
             <h2 className="text-lg font-semibold text-yellow-400 mb-3">{character.name}</h2>
@@ -942,7 +1080,7 @@ export default function HomePage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Zen:</span>
-                <span className="text-green-400">{BigInt(character.zen).toLocaleString()}</span>
+                <span className="text-green-400">{formatNumber(BigInt(character.zen))}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Monsters Killed:</span>
@@ -952,6 +1090,19 @@ export default function HomePage() {
                 <span className="text-gray-400">Deaths:</span>
                 <span className="text-red-400">{localDeaths.toLocaleString()}</span>
               </div>
+              {character.resetCount > 0 && (
+                <div className="mt-2 pt-2 border-t border-gray-700/50">
+                  <div className="text-xs text-yellow-400 font-semibold mb-1">Reset Bonuses ({character.resetCount}x)</div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">EXP Bonus:</span>
+                    <span className="text-purple-400">+{(character.resetCount * 0.1).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Zen Bonus:</span>
+                    <span className="text-green-400">+{(character.resetCount * 0.1).toFixed(1)}%</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Stat Upgrades */}
@@ -968,7 +1119,9 @@ export default function HomePage() {
                         <div><span className="text-blue-400">DEF:</span> +1 defense per level</div>
                         <div><span className="text-cyan-400">Speed:</span> +1 attack speed per level</div>
                         <div><span className="text-green-400">HP:</span> +10 HP per level</div>
-                        <div className="text-gray-400 mt-1 text-xs">Cost: 100 × level^1.5 zen</div>
+                        <div><span className="text-yellow-400">Zen%:</span> +1% zen drop per level</div>
+                        <div><span className="text-orange-400">Crit:</span> 5% base + 1% per 50 levels</div>
+                        <div className="text-gray-400 mt-1 text-xs">Cost: 50 × level^1.5 zen</div>
                       </div>
                     }
                   />
@@ -992,25 +1145,42 @@ export default function HomePage() {
               </div>
               {/* Stats */}
               {[
-                { key: 'dmg' as const, label: 'DMG', value: character.dmgLevel, cost: upgradeCosts.dmg, color: 'text-red-400' },
-                { key: 'def' as const, label: 'DEF', value: character.defLevel, cost: upgradeCosts.def, color: 'text-blue-400' },
-                { key: 'speed' as const, label: 'Speed', value: character.speedLevel, cost: upgradeCosts.speed, color: 'text-cyan-400' },
-                { key: 'hp' as const, label: 'HP', value: character.hpLevel, cost: upgradeCosts.hp, color: 'text-green-400' },
-              ].map(({ key, label, value, cost, color }) => (
-                <div key={key} className="flex justify-between items-center text-xs mb-1.5 bg-gray-700/30 rounded px-2 py-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`${color} font-bold w-12`}>{label}</span>
-                    <span className="text-white font-mono">Lv.{value}</span>
+                { key: 'dmg' as const, label: 'DMG', value: character.dmgLevel, color: 'text-red-400', icon: '⚔️' },
+                { key: 'def' as const, label: 'DEF', value: character.defLevel, color: 'text-blue-400', icon: '🛡️' },
+                { key: 'speed' as const, label: 'Speed', value: character.speedLevel, color: 'text-cyan-400', icon: '💨' },
+                { key: 'hp' as const, label: 'HP', value: character.hpLevel, color: 'text-green-400', icon: '❤️' },
+                { key: 'zen' as const, label: 'Zen%', value: character.zenLevel, color: 'text-yellow-400', icon: '💰' },
+              ].map(({ key, label, value, color, icon }) => {
+                const zen = BigInt(character.zen);
+                const amount = upgradeMultiplier === 'max'
+                  ? calculateMaxUpgrades(value, zen)
+                  : upgradeMultiplier;
+                const cost = amount > 0 ? calculateUpgradeCost(value, amount) : 0n;
+                const isSpeedMaxed = key === 'speed' && totalStats.attackSpeed >= 350;
+                const canAfford = amount > 0 && zen >= cost && !isSpeedMaxed;
+
+                return (
+                  <div key={key} className="flex justify-between items-center text-xs mb-1.5 bg-gray-800/60 rounded-lg px-3 py-1.5 border border-gray-700/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{icon}</span>
+                      <span className={`${color} font-bold w-12`}>{label}</span>
+                      <span className="text-white font-mono bg-gray-700/50 px-1.5 py-0.5 rounded text-[11px]">Lv.{value}</span>
+                      {isSpeedMaxed && <span className="text-green-400 text-[10px]">(MAX)</span>}
+                    </div>
+                    <button
+                      onClick={() => handleUpgradeStat(key)}
+                      disabled={!canAfford}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all transform active:scale-95 ${
+                        canAfford
+                          ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white shadow-sm shadow-green-500/20'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {isSpeedMaxed ? 'MAX' : amount > 0 ? `${formatNumber(cost)}` : 'Max'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleUpgradeStat(key)}
-                    disabled={BigInt(character.zen) < BigInt(cost)}
-                    className="px-2 py-0.5 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-xs font-bold transition-colors"
-                  >
-                    {BigInt(cost).toLocaleString()} Zen
-                  </button>
-                </div>
-              ))}
+                );
+              })}
               {character.level >= 400 && (
                 <button
                   onClick={handleReset}
@@ -1032,8 +1202,9 @@ export default function HomePage() {
                       <div className="font-bold text-yellow-400 mb-1">Combat Values:</div>
                       <div><span className="text-red-400">Attack:</span> DMG level × 2-3 + weapon</div>
                       <div><span className="text-blue-400">Defense:</span> DEF level + armor</div>
-                      <div><span className="text-cyan-400">ATK Speed:</span> Speed level + weapon (max 200)</div>
+                      <div><span className="text-cyan-400">ATK Speed:</span> Speed level + weapon (max 350)</div>
                       <div><span className="text-green-400">Max HP:</span> 50 + HP level × 10</div>
+                      <div><span className="text-orange-400">Crit:</span> 5% base + 1% per 50 levels + equipment</div>
                     </div>
                   }
                 />
@@ -1043,13 +1214,34 @@ export default function HomePage() {
                 <div><span className="text-gray-500">Defense:</span><span className="ml-1 text-blue-400">{totalStats.defense}</span></div>
                 <div><span className="text-gray-500">HP:</span><span className="ml-1 text-green-400">{stats.maxHp}</span></div>
                 <div><span className="text-gray-500">Crit:</span><span className="ml-1 text-yellow-400">{stats.criticalRate}%</span></div>
-                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-cyan-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
+                <div><span className="text-gray-500">ATK Speed:</span><span className="ml-1 text-cyan-400">{totalStats.attackSpeed}{totalStats.attackSpeed >= 350 && <span className="text-green-400 ml-1">(max)</span>}</span></div>
               </div>
             </div>
 
             {/* Crafting Materials - Desktop */}
             <div className="mt-3 pt-3 border-t border-gray-700">
-              <h3 className="text-xs font-semibold text-gray-400 mb-2">Crafting Materials</h3>
+              <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
+                Crafting Materials
+                <InfoTooltip
+                  color="purple"
+                  content={
+                    <div className="space-y-1 text-xs">
+                      <div className="font-bold text-purple-400 mb-1">Drop Rates (Lv41+ mobs):</div>
+                      <div><span className="text-purple-300">💎 Bless:</span> 0.8%</div>
+                      <div><span className="text-pink-400">💎 Soul:</span> 0.8%</div>
+                      <div><span className="text-orange-400">💎 Life:</span> 0.8%</div>
+                      <div><span className="text-yellow-400">💎 Chaos:</span> 0.4%</div>
+                      <div><span className="text-cyan-400">📜 Scroll:</span> 0.8%</div>
+                      <div><span className="text-red-400">🦴 Bone:</span> 0.8%</div>
+                      <div><span className="text-amber-400">🗝️ Key:</span> 0.8%</div>
+                      <div><span className="text-green-400">👁️ Eye:</span> 0.8%</div>
+                      <div className="pt-1 border-t border-gray-600">
+                        <span className="text-emerald-400">🪶 Feather:</span> 0.1% (Lv81+)
+                      </div>
+                    </div>
+                  }
+                />
+              </h3>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div className="flex items-center justify-center gap-1 bg-gray-700/30 rounded py-1">
                   <span className="text-purple-300">💎</span>
@@ -1101,7 +1293,7 @@ export default function HomePage() {
           </div>
 
           {/* Hunting Panel - Desktop */}
-          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 lg:col-span-2">
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
             <h2 className="text-lg font-semibold text-yellow-400 mb-3">Hunting Ground</h2>
             <HuntingPanel
               characterId={character.id}
@@ -1116,6 +1308,11 @@ export default function HomePage() {
               lifeSteal={equipmentBonuses.life_steal}
               reflectDamage={equipmentBonuses.reflect_damage}
               expBonus={equipmentBonuses.exp_bonus}
+              zenBonus={character.zenLevel}
+              resetCount={character.resetCount}
+              burstCooldownEnd={character.burstCooldownEnd}
+              excellentChance={stats.excellentChance}
+              poisonChance={stats.poisonChance}
               onHpChange={handleHpChange}
               onExpGain={handleExpGain}
               onItemDrop={handleItemDrop}
@@ -1155,33 +1352,146 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Inventory - Desktop */}
-          <div className={`bg-gray-800/50 rounded-lg p-4 border border-gray-700 ${craftingItem ? 'lg:col-span-3' : 'lg:col-span-4'}`}>
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-lg font-semibold text-yellow-400">Inventory</h2>
-              <button onClick={handleClearInventory} className="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-xs font-semibold">Clear All</button>
+          {/* Inventory + Crafting - Desktop */}
+          <div className="lg:col-span-3 flex gap-4">
+            {/* Inventory */}
+            <div className={`bg-gray-800/50 rounded-lg p-4 border border-gray-700 ${craftingItem ? 'flex-1' : 'w-full'}`}>
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-semibold text-yellow-400">Inventory</h2>
+                <button onClick={handleClearInventory} className="px-3 py-1 bg-red-700 hover:bg-red-600 rounded text-xs font-semibold">Clear All</button>
+              </div>
+              <div className={`grid ${craftingItem ? 'grid-cols-8' : 'grid-cols-12'} gap-1`}>
+                {inventory.map((slot) => (
+                  <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} onDeposit={handleDepositItem} />
+                ))}
+              </div>
             </div>
-            <div className={`grid ${craftingItem ? 'grid-cols-8' : 'grid-cols-12'} gap-1`}>
-              {inventory.map((slot) => (
-                <InventorySlot key={slot.slotIndex} item={slot.item} slotIndex={slot.slotIndex} equipment={equipment} onEquip={handleEquipItem} onDestroy={handleDestroyItem} onCraft={handleCraftItem} onDeposit={handleDepositItem} />
-              ))}
-            </div>
+
+            {/* Crafting Panel - Desktop Inline */}
+            {craftingItem && (
+              <div className="w-72 flex-shrink-0">
+                <CraftingPanel
+                  item={craftingItem.item}
+                  jewelOfBless={character.jewelOfBless}
+                  jewelOfSoul={character.jewelOfSoul}
+                  jewelOfLife={character.jewelOfLife}
+                  onCraft={handleCraftAction}
+                  onClose={handleCloseCrafting}
+                />
+              </div>
+            )}
           </div>
 
-          {/* Crafting Panel - Desktop */}
-          {craftingItem && (
-            <div className="lg:col-span-1">
-              <CraftingPanel
-                item={craftingItem.item}
-                jewelOfBless={character.jewelOfBless}
-                jewelOfSoul={character.jewelOfSoul}
-                jewelOfLife={character.jewelOfLife}
-                onCraft={handleCraftAction}
-                onClose={handleCloseCrafting}
-              />
-            </div>
-          )}
         </div>
+
+        {/* Ascension Skill Tree Modal */}
+        {showAscensionPanel && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowAscensionPanel(false)}>
+            <div
+              className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 rounded-2xl border-2 border-purple-600/50 shadow-2xl shadow-purple-900/50 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-purple-900/90 via-purple-800/90 to-purple-900/90 backdrop-blur p-4 border-b border-purple-500/30 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">⭐</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-purple-300">Ascension Tree</h2>
+                    <p className="text-sm text-purple-400/70">Unlock powerful bonuses with reset points</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="bg-purple-600/30 rounded-full px-4 py-2 border border-purple-500/50">
+                    <span className="text-purple-300 text-sm">Available Points:</span>
+                    <span className="ml-2 text-2xl font-bold text-yellow-400">{character.ascensionPoints}</span>
+                  </div>
+                  <button
+                    onClick={() => setShowAscensionPanel(false)}
+                    className="w-10 h-10 rounded-full bg-gray-700/50 hover:bg-red-600/50 transition-colors flex items-center justify-center text-xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Skill Tree Content */}
+              <div className="p-6">
+                {/* Info Banner */}
+                <div className="mb-6 p-3 bg-purple-900/30 rounded-lg border border-purple-500/30 text-center">
+                  <span className="text-purple-300 text-sm">
+                    Earn <span className="text-yellow-400 font-bold">+1 Ascension Point</span> each time you reset at level 400
+                  </span>
+                </div>
+
+                {/* Skill Tree Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { key: 'damage', label: 'Damage Mastery', value: character.ascDamage, bonus: '+2%', desc: 'Increases all damage dealt', color: 'from-red-600 to-red-800', borderColor: 'border-red-500', icon: '⚔️', total: `${(character.ascDamage * 2)}% DMG` },
+                    { key: 'critical', label: 'Critical Eye', value: character.ascCritical, bonus: '+1%', desc: 'Increases critical hit chance', color: 'from-yellow-600 to-orange-700', borderColor: 'border-yellow-500', icon: '💥', total: `${character.ascCritical}% Crit` },
+                    { key: 'health', label: 'Vitality', value: character.ascHealth, bonus: '+5%', desc: 'Increases maximum HP', color: 'from-green-600 to-emerald-800', borderColor: 'border-green-500', icon: '❤️', total: `${(character.ascHealth * 5)}% HP` },
+                    { key: 'lifeSteal', label: 'Vampirism', value: character.ascLifeSteal, bonus: '+0.5%', desc: 'Steal HP on each hit', color: 'from-pink-600 to-rose-800', borderColor: 'border-pink-500', icon: '🩸', total: `${(character.ascLifeSteal * 0.5).toFixed(1)}% LS` },
+                    { key: 'zen', label: 'Wealth', value: character.ascZen, bonus: '+3%', desc: 'Increases zen drops', color: 'from-amber-500 to-yellow-700', borderColor: 'border-amber-400', icon: '💰', total: `${(character.ascZen * 3)}% Zen` },
+                    { key: 'exp', label: 'Wisdom', value: character.ascExp, bonus: '+2%', desc: 'Increases experience gain', color: 'from-cyan-500 to-blue-700', borderColor: 'border-cyan-400', icon: '📈', total: `${(character.ascExp * 2)}% EXP` },
+                    { key: 'poison', label: 'Venom Strike', value: character.ascPoison, bonus: '+0.5%', desc: 'Chance to poison (10% current HP)', color: 'from-lime-600 to-green-900', borderColor: 'border-lime-500', icon: '🧪', total: `${(character.ascPoison * 0.5).toFixed(1)}% chance` },
+                    { key: 'excellent', label: 'Excellence', value: character.ascExcellent, bonus: '+0.25%', desc: 'Chance for excellent damage (2x)', color: 'from-indigo-500 to-violet-800', borderColor: 'border-indigo-400', icon: '✨', total: `${(character.ascExcellent * 0.25).toFixed(2)}% chance` },
+                  ].map(({ key, label, value, bonus, desc, color, borderColor, icon, total }) => (
+                    <div
+                      key={key}
+                      className={`relative bg-gradient-to-b ${color} rounded-xl border-2 ${borderColor} p-4 transform transition-all hover:scale-105 hover:shadow-lg`}
+                    >
+                      {/* Level Badge */}
+                      <div className="absolute -top-2 -right-2 bg-gray-900 border-2 border-gray-600 rounded-full w-8 h-8 flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">{value}</span>
+                      </div>
+
+                      {/* Icon */}
+                      <div className="text-4xl mb-2 text-center">{icon}</div>
+
+                      {/* Title */}
+                      <h3 className="text-white font-bold text-center text-sm mb-1">{label}</h3>
+
+                      {/* Bonus per point */}
+                      <div className="text-center text-xs text-white/70 mb-2">{bonus} per point</div>
+
+                      {/* Total bonus */}
+                      <div className="bg-black/30 rounded-lg py-1 px-2 text-center mb-3">
+                        <span className="text-white font-mono text-sm">{total}</span>
+                      </div>
+
+                      {/* Description */}
+                      <p className="text-white/60 text-xs text-center mb-3">{desc}</p>
+
+                      {/* Upgrade Button */}
+                      <button
+                        onClick={() => handleAscensionUpgrade(key)}
+                        disabled={character.ascensionPoints <= 0}
+                        className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${
+                          character.ascensionPoints > 0
+                            ? 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+                            : 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30'
+                        }`}
+                      >
+                        {character.ascensionPoints > 0 ? '+ Upgrade' : 'No Points'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Reset Info */}
+                <div className="mt-6 text-center">
+                  <p className="text-gray-500 text-sm">
+                    Total Resets: <span className="text-purple-400 font-bold">{character.resetCount}</span>
+                    {character.level < 400 && (
+                      <span className="ml-2 text-gray-600">
+                        (Next reset at level 400 - currently {character.level})
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mobile Layout - Tabs */}
         <div className="lg:hidden">
@@ -1201,6 +1511,11 @@ export default function HomePage() {
                 lifeSteal={equipmentBonuses.life_steal}
                 reflectDamage={equipmentBonuses.reflect_damage}
                 expBonus={equipmentBonuses.exp_bonus}
+                zenBonus={character.zenLevel}
+                resetCount={character.resetCount}
+                burstCooldownEnd={character.burstCooldownEnd}
+                excellentChance={stats.excellentChance}
+                poisonChance={stats.poisonChance}
                 onHpChange={handleHpChange}
                 onExpGain={handleExpGain}
                 onItemDrop={handleItemDrop}
@@ -1210,9 +1525,135 @@ export default function HomePage() {
               />
             </div>
 
+            {/* Upgrade Stats - Mobile (in Hunt tab) */}
+            <div className="mt-3 bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-semibold text-yellow-400 flex items-center gap-1">
+                  Upgrade Stats
+                  <InfoTooltip
+                    color="blue"
+                    content={
+                      <div className="space-y-1">
+                        <div className="font-bold text-yellow-400 mb-1">Stat Bonuses:</div>
+                        <div><span className="text-red-400">DMG:</span> +2 min, +3 max damage per level</div>
+                        <div><span className="text-blue-400">DEF:</span> +1 defense per level</div>
+                        <div><span className="text-cyan-400">Speed:</span> +1 attack speed per level</div>
+                        <div><span className="text-green-400">HP:</span> +10 HP per level</div>
+                        <div><span className="text-yellow-400">Zen%:</span> +1% zen drop per level</div>
+                        <div><span className="text-orange-400">Crit:</span> 5% base + 1% per 50 levels</div>
+                        <div className="text-gray-400 mt-1 text-xs">Cost: 50 × level^1.5 zen</div>
+                      </div>
+                    }
+                  />
+                </span>
+              </div>
+              {/* Multiplier Toggle */}
+              <div className="flex gap-1 mb-2">
+                {([1, 5, 10, 100, 'max'] as const).map((mult) => (
+                  <button
+                    key={mult}
+                    onClick={() => setUpgradeMultiplier(mult)}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors ${
+                      upgradeMultiplier === mult
+                        ? 'bg-yellow-500 text-gray-900'
+                        : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    }`}
+                  >
+                    {mult === 'max' ? 'MAX' : `x${mult}`}
+                  </button>
+                ))}
+              </div>
+              {/* Stats */}
+              {[
+                { key: 'dmg' as const, label: 'DMG', value: character.dmgLevel, color: 'text-red-400', icon: '⚔️' },
+                { key: 'def' as const, label: 'DEF', value: character.defLevel, color: 'text-blue-400', icon: '🛡️' },
+                { key: 'speed' as const, label: 'Speed', value: character.speedLevel, color: 'text-cyan-400', icon: '💨' },
+                { key: 'hp' as const, label: 'HP', value: character.hpLevel, color: 'text-green-400', icon: '❤️' },
+                { key: 'zen' as const, label: 'Zen%', value: character.zenLevel, color: 'text-yellow-400', icon: '💰' },
+              ].map(({ key, label, value, color, icon }) => {
+                const zen = BigInt(character.zen);
+                const amount = upgradeMultiplier === 'max'
+                  ? calculateMaxUpgrades(value, zen)
+                  : upgradeMultiplier;
+                const cost = amount > 0 ? calculateUpgradeCost(value, amount) : 0n;
+                const isSpeedMaxed = key === 'speed' && totalStats.attackSpeed >= 350;
+                const canAfford = amount > 0 && zen >= cost && !isSpeedMaxed;
+
+                return (
+                  <div key={key} className="flex justify-between items-center py-2 bg-gray-800/60 rounded-lg px-3 mb-1.5 border border-gray-700/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{icon}</span>
+                      <span className={`${color} font-bold w-14`}>{label}</span>
+                      <span className="text-white font-mono text-sm bg-gray-700/50 px-2 py-0.5 rounded">Lv.{value}</span>
+                      {isSpeedMaxed && <span className="text-green-400 text-xs">(MAX)</span>}
+                    </div>
+                    <button
+                      onClick={() => handleUpgradeStat(key)}
+                      disabled={!canAfford}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all transform active:scale-95 ${
+                        canAfford
+                          ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white shadow-md shadow-green-500/20'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {isSpeedMaxed ? 'MAX' : amount > 0 ? `${formatNumber(cost)}` : 'Max'}
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Combat Stats - Mobile */}
+              <div className="mt-3 pt-3 border-t border-gray-700">
+                <h3 className="text-xs font-semibold text-gray-400 mb-2">Combat Stats</h3>
+                <div className="grid grid-cols-3 gap-1.5 text-xs">
+                  <div className="bg-gray-800/60 rounded px-2 py-1.5 text-center">
+                    <div className="text-red-400 font-bold">{totalStats.minDamage}-{totalStats.maxDamage}</div>
+                    <div className="text-gray-500 text-[10px]">Attack</div>
+                  </div>
+                  <div className="bg-gray-800/60 rounded px-2 py-1.5 text-center">
+                    <div className="text-blue-400 font-bold">{totalStats.defense}</div>
+                    <div className="text-gray-500 text-[10px]">Defense</div>
+                  </div>
+                  <div className="bg-gray-800/60 rounded px-2 py-1.5 text-center">
+                    <div className="text-green-400 font-bold">{stats.maxHp}</div>
+                    <div className="text-gray-500 text-[10px]">HP</div>
+                  </div>
+                  <div className="bg-gray-800/60 rounded px-2 py-1.5 text-center">
+                    <div className="text-yellow-400 font-bold">{stats.criticalRate}%</div>
+                    <div className="text-gray-500 text-[10px]">Crit</div>
+                  </div>
+                  <div className="bg-gray-800/60 rounded px-2 py-1.5 text-center col-span-2">
+                    <div className="text-cyan-400 font-bold">{totalStats.attackSpeed}{totalStats.attackSpeed >= 350 && <span className="text-green-400 ml-1">(max)</span>}</div>
+                    <div className="text-gray-500 text-[10px]">ATK Speed</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Crafting Materials - Mobile */}
             <div className="mt-3 bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-              <h3 className="text-sm font-semibold text-yellow-400 mb-2">Crafting Materials</h3>
+              <h3 className="text-sm font-semibold text-yellow-400 mb-2 flex items-center gap-1">
+                Crafting Materials
+                <InfoTooltip
+                  color="purple"
+                  content={
+                    <div className="space-y-1 text-xs">
+                      <div className="font-bold text-purple-400 mb-1">Drop Rates (Lv41+ mobs):</div>
+                      <div><span className="text-purple-300">💎 Bless:</span> 0.8%</div>
+                      <div><span className="text-pink-400">💎 Soul:</span> 0.8%</div>
+                      <div><span className="text-orange-400">💎 Life:</span> 0.8%</div>
+                      <div><span className="text-yellow-400">💎 Chaos:</span> 0.4%</div>
+                      <div><span className="text-cyan-400">📜 Scroll:</span> 0.8%</div>
+                      <div><span className="text-red-400">🦴 Bone:</span> 0.8%</div>
+                      <div><span className="text-amber-400">🗝️ Key:</span> 0.8%</div>
+                      <div><span className="text-green-400">👁️ Eye:</span> 0.8%</div>
+                      <div className="pt-1 border-t border-gray-600">
+                        <span className="text-emerald-400">🪶 Feather:</span> 0.1% (Lv81+)
+                      </div>
+                    </div>
+                  }
+                />
+              </h3>
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="bg-gray-700/50 rounded p-2">
                   <div className="text-purple-300">💎 <span className="font-bold">{character.jewelOfBless}</span></div>
@@ -1270,7 +1711,7 @@ export default function HomePage() {
                   </div>
                   <div className="bg-gray-700/50 rounded p-2">
                     <div className="text-gray-400 text-xs">Zen</div>
-                    <div className="text-green-400 font-bold">{BigInt(character.zen).toLocaleString()}</div>
+                    <div className="text-green-400 font-bold">{formatNumber(BigInt(character.zen))}</div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1284,137 +1725,101 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Jewels */}
-                <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                  <div className="bg-gray-700/50 rounded p-2">
-                    <div className="text-lg text-purple-300">💎</div>
-                    <div className="text-purple-300 font-bold text-sm">{character.jewelOfBless}</div>
-                    <div className="text-gray-500 text-xs">Bless</div>
-                  </div>
-                  <div className="bg-gray-700/50 rounded p-2">
-                    <div className="text-lg text-pink-400">💎</div>
-                    <div className="text-pink-400 font-bold text-sm">{character.jewelOfSoul}</div>
-                    <div className="text-gray-500 text-xs">Soul</div>
-                  </div>
-                  <div className="bg-gray-700/50 rounded p-2">
-                    <div className="text-lg text-orange-400">💎</div>
-                    <div className="text-orange-400 font-bold text-sm">{character.jewelOfLife}</div>
-                    <div className="text-gray-500 text-xs">Life</div>
-                  </div>
-                  <div className="bg-gray-700/50 rounded p-2">
-                    <div className="text-lg text-yellow-400">💎</div>
-                    <div className="text-yellow-400 font-bold text-sm">{character.jewelOfChaos}</div>
-                    <div className="text-gray-500 text-xs">Chaos</div>
-                  </div>
-                </div>
-
-                {/* Stat Upgrades */}
-                <div className="mt-3 pt-3 border-t border-gray-700">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-semibold flex items-center gap-1">
-                      Upgrade Stats
-                      <InfoTooltip
-                        color="blue"
-                        content={
-                          <div className="space-y-1">
-                            <div className="font-bold text-yellow-400 mb-1">Stat Bonuses:</div>
-                            <div><span className="text-red-400">DMG:</span> +2 min, +3 max damage per level</div>
-                            <div><span className="text-blue-400">DEF:</span> +1 defense per level</div>
-                            <div><span className="text-cyan-400">Speed:</span> +1 attack speed per level</div>
-                            <div><span className="text-green-400">HP:</span> +10 HP per level</div>
-                            <div className="text-gray-400 mt-1 text-xs">Cost: 100 × level^1.5 zen</div>
-                          </div>
-                        }
-                      />
-                    </span>
-                  </div>
-                  {/* Multiplier Toggle */}
-                  <div className="flex gap-1 mb-2">
-                    {([1, 5, 10, 100, 'max'] as const).map((mult) => (
-                      <button
-                        key={mult}
-                        onClick={() => setUpgradeMultiplier(mult)}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded transition-colors ${
-                          upgradeMultiplier === mult
-                            ? 'bg-yellow-500 text-gray-900'
-                            : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                        }`}
-                      >
-                        {mult === 'max' ? 'MAX' : `x${mult}`}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Stats */}
-                  {[
-                    { key: 'dmg' as const, label: 'DMG', value: character.dmgLevel, cost: upgradeCosts.dmg, color: 'text-red-400' },
-                    { key: 'def' as const, label: 'DEF', value: character.defLevel, cost: upgradeCosts.def, color: 'text-blue-400' },
-                    { key: 'speed' as const, label: 'Speed', value: character.speedLevel, cost: upgradeCosts.speed, color: 'text-cyan-400' },
-                    { key: 'hp' as const, label: 'HP', value: character.hpLevel, cost: upgradeCosts.hp, color: 'text-green-400' },
-                  ].map(({ key, label, value, cost, color }) => (
-                    <div key={key} className="flex justify-between items-center py-1.5 bg-gray-700/30 rounded px-2 mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`${color} font-bold w-12`}>{label}</span>
-                        <span className="text-white font-mono">Lv.{value}</span>
+                {/* Reset Bonuses */}
+                {character.resetCount > 0 && (
+                  <div className="mt-2 bg-yellow-900/20 rounded p-2 border border-yellow-700/30">
+                    <div className="text-xs text-yellow-400 font-semibold mb-1">Reset Bonuses ({character.resetCount}x)</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">EXP:</span>
+                        <span className="text-purple-400">+{(character.resetCount * 0.1).toFixed(1)}%</span>
                       </div>
-                      <button
-                        onClick={() => handleUpgradeStat(key)}
-                        disabled={BigInt(character.zen) < BigInt(cost)}
-                        className="px-2 py-1 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:opacity-50 rounded text-xs font-bold transition-colors"
-                      >
-                        {BigInt(cost).toLocaleString()} Zen
-                      </button>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Zen:</span>
+                        <span className="text-green-400">+{(character.resetCount * 0.1).toFixed(1)}%</span>
+                      </div>
                     </div>
-                  ))}
-                  {character.level >= 400 && (
+                  </div>
+                )}
+
+                {/* Reset Character Button (when level 400) */}
+                {character.level >= 400 && (
+                  <div className="mt-3 pt-3 border-t border-gray-700">
                     <button
                       onClick={handleReset}
-                      className="w-full mt-2 py-3 bg-purple-600 hover:bg-purple-500 rounded text-lg font-bold animate-pulse"
+                      className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded text-lg font-bold animate-pulse"
                     >
                       ⭐ RESET CHARACTER ⭐
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {/* Combat Stats */}
+                {/* Ascension Skill Tree */}
                 <div className="mt-3 pt-3 border-t border-gray-700">
-                  <h3 className="text-sm font-semibold text-gray-300 mb-2 flex items-center gap-1">
-                    Combat Stats
+                  <h3 className="text-sm font-semibold text-purple-400 mb-2 flex items-center gap-2">
+                    ⭐ Ascension Skills
                     <InfoTooltip
-                      color="yellow"
+                      color="purple"
                       content={
                         <div className="space-y-1">
-                          <div className="font-bold text-yellow-400 mb-1">Combat Values:</div>
-                          <div><span className="text-red-400">Attack:</span> DMG level × 2-3 + weapon</div>
-                          <div><span className="text-blue-400">Defense:</span> DEF level + armor</div>
-                          <div><span className="text-cyan-400">ATK Speed:</span> Speed level + weapon (max 200)</div>
-                          <div><span className="text-green-400">Max HP:</span> 50 + HP level × 10</div>
+                          <div className="font-bold text-purple-400 mb-1">Ascension Bonuses:</div>
+                          <div><span className="text-red-400">Damage:</span> +2% DMG per point</div>
+                          <div><span className="text-yellow-400">Critical:</span> +1% Crit per point</div>
+                          <div><span className="text-green-400">Health:</span> +5% HP per point</div>
+                          <div><span className="text-pink-400">Life Steal:</span> +0.5% LS per point</div>
+                          <div><span className="text-amber-400">Zen:</span> +3% Zen per point</div>
+                          <div><span className="text-cyan-400">Experience:</span> +2% EXP per point</div>
+                          <div><span className="text-lime-400">Poison:</span> +0.5% chance (10% HP dmg)</div>
+                          <div><span className="text-indigo-400">Excellent:</span> +0.25% chance (2x dmg)</div>
+                          <div className="text-gray-400 mt-1 text-xs">+1 point per reset</div>
                         </div>
                       }
                     />
+                    <span className="text-xs bg-purple-600 px-2 py-0.5 rounded-full">
+                      {character.ascensionPoints} pts
+                    </span>
                   </h3>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-gray-700/50 rounded p-2">
-                      <span className="text-gray-500">Attack:</span>
-                      <span className="ml-1 text-red-400 font-bold">{totalStats.minDamage}-{totalStats.maxDamage}</span>
-                    </div>
-                    <div className="bg-gray-700/50 rounded p-2">
-                      <span className="text-gray-500">Defense:</span>
-                      <span className="ml-1 text-blue-400 font-bold">{totalStats.defense}</span>
-                    </div>
-                    <div className="bg-gray-700/50 rounded p-2">
-                      <span className="text-gray-500">HP:</span>
-                      <span className="ml-1 text-green-400 font-bold">{stats.maxHp}</span>
-                    </div>
-                    <div className="bg-gray-700/50 rounded p-2">
-                      <span className="text-gray-500">Crit:</span>
-                      <span className="ml-1 text-yellow-400 font-bold">{stats.criticalRate}%</span>
-                    </div>
-                    <div className="bg-gray-700/50 rounded p-2 col-span-2">
-                      <span className="text-gray-500">ATK Speed:</span>
-                      <span className="ml-1 text-cyan-400 font-bold">{totalStats.attackSpeed}</span>
-                      {totalStats.attackSpeed >= 200 && <span className="text-green-400 ml-1">(max)</span>}
-                    </div>
+                  <div className="space-y-2">
+                    {[
+                      { key: 'damage', label: 'Damage', value: character.ascDamage, bonus: '+2% DMG', color: 'text-red-400', icon: '⚔️' },
+                      { key: 'critical', label: 'Critical', value: character.ascCritical, bonus: '+1% Crit', color: 'text-yellow-400', icon: '💥' },
+                      { key: 'health', label: 'Health', value: character.ascHealth, bonus: '+5% HP', color: 'text-green-400', icon: '❤️' },
+                      { key: 'lifeSteal', label: 'Life Steal', value: character.ascLifeSteal, bonus: '+0.5% LS', color: 'text-pink-400', icon: '🩸' },
+                      { key: 'zen', label: 'Zen', value: character.ascZen, bonus: '+3% Zen', color: 'text-amber-400', icon: '💰' },
+                      { key: 'exp', label: 'Experience', value: character.ascExp, bonus: '+2% EXP', color: 'text-cyan-400', icon: '📈' },
+                      { key: 'poison', label: 'Poison', value: character.ascPoison, bonus: '+0.5%', color: 'text-lime-400', icon: '🧪' },
+                      { key: 'excellent', label: 'Excellent', value: character.ascExcellent, bonus: '+0.25%', color: 'text-indigo-400', icon: '✨' },
+                    ].map(({ key, label, value, bonus, color, icon }) => (
+                      <div key={key} className="flex items-center justify-between bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
+                        <div className="flex items-center gap-2">
+                          <span>{icon}</span>
+                          <div>
+                            <span className={`${color} font-medium text-sm`}>{label}</span>
+                            <span className="text-gray-500 text-xs ml-2">{bonus}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-mono bg-gray-700/50 px-2 py-0.5 rounded text-sm">{value}</span>
+                          <button
+                            onClick={() => handleAscensionUpgrade(key)}
+                            disabled={character.ascensionPoints <= 0}
+                            className={`w-8 h-8 rounded-lg text-lg font-bold transition-all transform active:scale-95 ${
+                              character.ascensionPoints > 0
+                                ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                  {character.ascensionPoints === 0 && character.resetCount === 0 && (
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Resetuj postać (lvl 400) aby zdobyć punkty ascension
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1503,12 +1908,12 @@ export default function HomePage() {
                 )}
                 {offlineRewards.zen > 0 && (
                   <div className="text-2xl font-bold text-green-400">
-                    +{offlineRewards.zen.toLocaleString()} Zen
+                    +{formatNumber(offlineRewards.zen)} Zen
                   </div>
                 )}
               </div>
               <p className="text-xs text-gray-500 mb-4">
-                (20% of normal production, max 8h)
+                (5% of normal production, max 8h)
               </p>
               <button
                 onClick={() => setOfflineRewards(null)}

@@ -35,6 +35,8 @@ interface CharacterData {
   defense: number;
   vitality: number;
   monstersKilled: number;
+  zenLevel: number;
+  resetCount: number;
 }
 
 interface Stats {
@@ -181,6 +183,8 @@ export default function EventsPage() {
           defense: data.character.defense,
           vitality: data.character.vitality,
           monstersKilled: data.character.monstersKilled || 0,
+          zenLevel: data.character.zenLevel || 1,
+          resetCount: data.character.resetCount || 0,
         });
         setStats(data.stats);
         setBonuses(data.bonuses || {
@@ -220,27 +224,11 @@ export default function EventsPage() {
     const eligibleMonsters = MONSTERS.filter(m => m.level >= min && m.level <= max);
     const monster = eligibleMonsters[Math.floor(Math.random() * eligibleMonsters.length)] || MONSTERS[0];
 
-    // Event monsters are stronger - multipliers based on difficulty
-    const multipliers = {
-      easy: { hp: 2, damage: 1.5, defense: 1.5 },
-      medium: { hp: 3, damage: 2, defense: 2 },
-      hard: { hp: 5, damage: 3, defense: 2.5 },
-    };
-    const mult = multipliers[diff];
-
-    const boostedHp = Math.floor(monster.hp * mult.hp);
-    const boostedMinDamage = Math.floor(monster.minDamage * mult.damage);
-    const boostedMaxDamage = Math.floor(monster.maxDamage * mult.damage);
-    const boostedDefense = Math.floor(monster.defense * mult.defense);
-
+    // Use original monster stats (same as normal hunting)
     return {
       ...monster,
-      hp: boostedHp,
-      minDamage: boostedMinDamage,
-      maxDamage: boostedMaxDamage,
-      defense: boostedDefense,
-      currentHp: boostedHp,
-      maxHp: boostedHp,
+      currentHp: monster.hp,
+      maxHp: monster.hp,
     };
   }, []);
 
@@ -359,15 +347,20 @@ export default function EventsPage() {
 
   // Combat effect
   useEffect(() => {
-    if (!activeEvent || !currentMonster || !stats || !bonuses || !difficulty) return;
+    if (!activeEvent || !currentMonster || !stats || !bonuses || !difficulty || !character) return;
 
     const totalMinDamage = stats.minDamage + (bonuses.damage_min || 0);
     const totalMaxDamage = stats.maxDamage + (bonuses.damage_max || 0);
     const totalDefense = stats.physicalDefense + (bonuses.defense || 0);
     const critRate = stats.criticalRate + (bonuses.critical_rate || 0);
     const lifeSteal = bonuses.life_steal || 0;
-    const attackSpeed = stats.attackSpeed + (bonuses.attack_speed || 0);
-    const attackInterval = Math.max(250, 2000 - attackSpeed * 10); // Same as normal hunting
+    const attackSpeed = Math.min(350, stats.attackSpeed + (bonuses.attack_speed || 0));
+    const attackInterval = Math.max(150, 2000 - attackSpeed * 10); // Same as normal hunting
+
+    // Zen bonus: zenLevel gives +1% per level (level 1 = 0%), reset bonus: +0.1% per reset
+    const zenBonusPercent = (character.zenLevel - 1) + (character.resetCount * 0.1);
+    // EXP bonus from resets: +0.1% per reset
+    const resetExpBonus = character.resetCount * 0.1;
 
     combatIntervalRef.current = setInterval(() => {
       setCurrentMonster(prev => {
@@ -392,8 +385,9 @@ export default function EventsPage() {
 
         // Monster defeated
         if (newMonsterHp <= 0) {
-          const expGain = Math.floor(calculateExp(prev.exp, bonuses.exp_bonus || 0) * EXP_MULTIPLIER);
-          const zenGain = calculateZen(prev.zen, 0);
+          const totalExpBonus = (bonuses.exp_bonus || 0) + resetExpBonus;
+          const expGain = Math.floor(calculateExp(prev.exp, totalExpBonus) * EXP_MULTIPLIER);
+          const zenGain = calculateZen(prev.zen, zenBonusPercent);
 
           setEventExp(e => e + expGain);
           setEventZen(z => z + zenGain);

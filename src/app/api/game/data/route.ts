@@ -7,7 +7,7 @@ import { calculateStats, calculateUpgradeCost } from '@/lib/services/stats.servi
 import prisma from '@/lib/prisma';
 
 // Offline rewards constants
-const OFFLINE_RATE = 0.20; // 20% of normal production
+const OFFLINE_RATE = 0.05; // 5% of normal production
 const MAX_OFFLINE_SECONDS = 28800; // 8 hours
 const MIN_OFFLINE_SECONDS = 60; // 1 minute minimum
 const MAX_EXP_PER_SECOND = 50000; // Safety limit for exp/sec
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // Calculate stats
+    // Calculate stats (including ascension bonuses)
     const calculatedStats = calculateStats(
       {
         id: character.id,
@@ -67,6 +67,15 @@ export async function GET(request: NextRequest) {
         defense: character.defense,
         vitality: character.vitality,
         speedStat: character.speedStat,
+        // Ascension bonuses
+        ascDamage: character.ascDamage,
+        ascCritical: character.ascCritical,
+        ascHealth: character.ascHealth,
+        ascLifeSteal: character.ascLifeSteal,
+        ascZen: character.ascZen,
+        ascExp: character.ascExp,
+        ascPoison: character.ascPoison,
+        ascExcellent: character.ascExcellent,
       },
       bonuses
     );
@@ -108,8 +117,9 @@ export async function GET(request: NextRequest) {
         const MAX_LEVEL = 400;
         let newLevel = character.level;
 
-        while (newExp >= BigInt(newLevel * 100) && newLevel < MAX_LEVEL) {
-          newExp -= BigInt(newLevel * 100);
+        // Quadratic formula: level² × 5
+        while (newExp >= BigInt(newLevel * newLevel * 5) && newLevel < MAX_LEVEL) {
+          newExp -= BigInt(newLevel * newLevel * 5);
           newLevel++;
         }
 
@@ -148,6 +158,7 @@ export async function GET(request: NextRequest) {
       def: calculateUpgradeCost(character.defense, 1).toString(),
       speed: calculateUpgradeCost(character.speedStat, 1).toString(),
       hp: calculateUpgradeCost(character.vitality, 1).toString(),
+      zen: calculateUpgradeCost(character.zenMultiplier, 1).toString(),
     };
 
     return NextResponse.json({
@@ -164,6 +175,7 @@ export async function GET(request: NextRequest) {
         defLevel: character.defense,
         speedLevel: character.speedStat,
         hpLevel: character.vitality,
+        zenLevel: character.zenMultiplier,
         // Other
         currentHp: character.currentHp,
         resetCount: character.resetCount,
@@ -185,6 +197,18 @@ export async function GET(request: NextRequest) {
         // Daily entries per character
         bloodCastleEntriesToday: character.bloodCastleEntriesToday,
         devilSquareEntriesToday: character.devilSquareEntriesToday,
+        // Skill cooldowns
+        burstCooldownEnd: character.burstCooldownEnd?.toISOString() ?? null,
+        // Ascension system
+        ascensionPoints: character.ascensionPoints,
+        ascDamage: character.ascDamage,
+        ascCritical: character.ascCritical,
+        ascHealth: character.ascHealth,
+        ascLifeSteal: character.ascLifeSteal,
+        ascZen: character.ascZen,
+        ascExp: character.ascExp,
+        ascPoison: character.ascPoison,
+        ascExcellent: character.ascExcellent,
       },
       inventory,
       equipment,

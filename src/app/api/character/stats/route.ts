@@ -32,6 +32,12 @@ export async function GET(request: NextRequest) {
         defense: character.defense,
         vitality: character.vitality,
         speedStat: character.speedStat,
+        ascDamage: character.ascDamage,
+        ascCritical: character.ascCritical,
+        ascHealth: character.ascHealth,
+        ascLifeSteal: character.ascLifeSteal,
+        ascZen: character.ascZen,
+        ascExp: character.ascExp,
       },
       bonuses
     );
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { character_id, stat_name, amount = 1 } = body;
 
-    const validStats = ['dmg', 'def', 'speed', 'hp'];
+    const validStats = ['dmg', 'def', 'speed', 'hp', 'zen'];
     if (!stat_name || !validStats.includes(stat_name)) {
       return errorResponse('Invalid stat name');
     }
@@ -100,11 +106,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Map stat names to database columns
-    const statMap: Record<string, 'damage' | 'defense' | 'speedStat' | 'vitality'> = {
+    const statMap: Record<string, 'damage' | 'defense' | 'speedStat' | 'vitality' | 'zenMultiplier'> = {
       dmg: 'damage',
       def: 'defense',
       speed: 'speedStat',
       hp: 'vitality',
+      zen: 'zenMultiplier',
     };
 
     const dbColumn = statMap[stat_name];
@@ -155,6 +162,12 @@ export async function POST(request: NextRequest) {
         defense: updatedCharacter.defense,
         vitality: updatedCharacter.vitality,
         speedStat: updatedCharacter.speedStat,
+        ascDamage: character.ascDamage,
+        ascCritical: character.ascCritical,
+        ascHealth: character.ascHealth,
+        ascLifeSteal: character.ascLifeSteal,
+        ascZen: character.ascZen,
+        ascExp: character.ascExp,
       },
       bonuses
     );
@@ -165,6 +178,7 @@ export async function POST(request: NextRequest) {
       def: calculateUpgradeCost(updatedCharacter.defense, 1).toString(),
       speed: calculateUpgradeCost(updatedCharacter.speedStat, 1).toString(),
       hp: calculateUpgradeCost(updatedCharacter.vitality, 1).toString(),
+      zen: calculateUpgradeCost(updatedCharacter.zenMultiplier, 1).toString(),
     };
 
     return NextResponse.json({
