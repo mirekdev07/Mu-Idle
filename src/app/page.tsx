@@ -1260,73 +1260,6 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Helpers */}
-            <div className="mt-3 pt-3 border-t border-gray-700">
-              <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
-                🤖 Helpers
-                <InfoTooltip
-                  color="yellow"
-                  content={
-                    <div className="space-y-1 text-xs">
-                      <div className="font-bold text-yellow-400 mb-1">Helpers assist you in hunting:</div>
-                      <div><span className="text-amber-400">Attacker:</span> Deals DMG 2x per second</div>
-                      <div><span className="text-emerald-400">Buffer:</span> Increases your DMG by 0.1% per level (max 10%)</div>
-                    </div>
-                  }
-                />
-              </h3>
-              <div className="space-y-2">
-                {/* Attacker Helper */}
-                <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">⚔️</span>
-                    <div>
-                      <span className="text-amber-400 font-bold">Attacker</span>
-                      <span className="text-gray-400 ml-2">Lv.{character.helperAttackerLevel}</span>
-                      <div className="text-[10px] text-gray-500">
-                        DMG: {5 + character.helperAttackerLevel * 2} (2x/sec)
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleUpgradeHelper('attacker')}
-                    disabled={BigInt(character.zen) < calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                      BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')
-                        ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {formatNumber(calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker'))}
-                  </button>
-                </div>
-                {/* Buffer Helper */}
-                <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">✨</span>
-                    <div>
-                      <span className="text-emerald-400 font-bold">Buffer</span>
-                      <span className="text-gray-400 ml-2">Lv.{character.helperBufferLevel}/100</span>
-                      <div className="text-[10px] text-gray-500">
-                        +{(character.helperBufferLevel * 0.1).toFixed(1)}% DMG
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleUpgradeHelper('buffer')}
-                    disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                      character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
-                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    {character.helperBufferLevel >= 100 ? 'MAX' : formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {/* Combat Stats */}
             <div className="mt-3 pt-3 border-t border-gray-700">
               <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1">
@@ -1460,6 +1393,73 @@ export default function HomePage() {
               onDeath={handleDeath}
               onMonsterKill={handleMonsterKill}
             />
+
+            {/* Helpers - Desktop */}
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <h3 className="text-sm font-semibold text-yellow-400 mb-3 flex items-center gap-2">
+                🤖 Helpers
+                <InfoTooltip
+                  color="yellow"
+                  content={
+                    <div className="space-y-1 text-xs">
+                      <div className="font-bold text-yellow-400 mb-1">Helpers assist you in hunting:</div>
+                      <div><span className="text-amber-400">Attacker:</span> Deals DMG 2x per second</div>
+                      <div><span className="text-emerald-400">Buffer:</span> Increases your DMG by 0.1% per level (max 10%)</div>
+                    </div>
+                  }
+                />
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Attacker Helper */}
+                <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">⚔️</span>
+                    <div>
+                      <div className="text-amber-400 font-bold">Attacker</div>
+                      <div className="text-xs text-gray-400">Level {character.helperAttackerLevel}</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-300 mb-2">
+                    DMG: <span className="text-amber-400 font-bold">{5 + character.helperAttackerLevel * 2}</span> (2x/sec)
+                  </div>
+                  <button
+                    onClick={() => handleUpgradeHelper('attacker')}
+                    disabled={BigInt(character.zen) < calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')}
+                    className={`w-full px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker')
+                        ? 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    Upgrade: {formatNumber(calculateHelperUpgradeCost(character.helperAttackerLevel, 'attacker'))}
+                  </button>
+                </div>
+                {/* Buffer Helper */}
+                <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">✨</span>
+                    <div>
+                      <div className="text-emerald-400 font-bold">Buffer</div>
+                      <div className="text-xs text-gray-400">Level {character.helperBufferLevel}/100</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-300 mb-2">
+                    Bonus: <span className="text-emerald-400 font-bold">+{(character.helperBufferLevel * 0.1).toFixed(1)}%</span> DMG
+                  </div>
+                  <button
+                    onClick={() => handleUpgradeHelper('buffer')}
+                    disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
+                    className={`w-full px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
+                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {character.helperBufferLevel >= 100 ? 'MAX LEVEL' : `Upgrade: ${formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}`}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Equipment Panel - Desktop */}
