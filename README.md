@@ -2,6 +2,8 @@
 
 Idle / clicker RPG inspired by **MU Online** — characters, equipment, bosses, events, ranking, and an offline rewards system. Web app built with Next.js, with an Android mobile build via Capacitor.
 
+**Live:** https://mu-idle-nextjs.vercel.app
+
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)
