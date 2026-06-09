@@ -6,6 +6,15 @@ import { getEquipment, getEquipmentBonuses } from '@/lib/services/equipment.serv
 import { calculateStats, calculateUpgradeCost } from '@/lib/services/stats.service';
 import prisma from '@/lib/prisma';
 
+// Helper function to check if two dates are the same day
+function isSameDay(date1: Date, date2: Date): boolean {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+}
+
 // Offline rewards constants
 const OFFLINE_RATE = 0.05; // 5% of normal production
 const MAX_OFFLINE_SECONDS = 28800; // 8 hours
@@ -194,9 +203,13 @@ export async function GET(request: NextRequest) {
         feather: user?.feather ?? 0,
         bloodCastleTicket: user?.bloodCastleTicket ?? 0,
         devilSquareTicket: user?.devilSquareTicket ?? 0,
-        // Daily entries per character
-        bloodCastleEntriesToday: character.bloodCastleEntriesToday,
-        devilSquareEntriesToday: character.devilSquareEntriesToday,
+        // Daily entries per character (reset if it's a new day)
+        bloodCastleEntriesToday: (character.lastEventResetDate && isSameDay(character.lastEventResetDate, new Date()))
+          ? character.bloodCastleEntriesToday
+          : 0,
+        devilSquareEntriesToday: (character.lastEventResetDate && isSameDay(character.lastEventResetDate, new Date()))
+          ? character.devilSquareEntriesToday
+          : 0,
         // Skill cooldowns
         burstCooldownEnd: character.burstCooldownEnd?.toISOString() ?? null,
         // Ascension system
@@ -212,6 +225,8 @@ export async function GET(request: NextRequest) {
         // Helpers system
         helperAttackerLevel: character.helperAttackerLevel,
         helperBufferLevel: character.helperBufferLevel,
+        bufferActiveUntil: character.bufferActiveUntil?.toISOString() ?? null,
+        bufferCooldownEnd: character.bufferCooldownEnd?.toISOString() ?? null,
       },
       inventory,
       equipment,

@@ -3,8 +3,8 @@ import { CalculatedStats } from '@/lib/services/stats.service';
 
 // Experience required for next level
 export function getExpForLevel(level: number): number {
-  // Quadratic formula: level² × 3.75 (reduced by 25%)
-  return Math.floor(level * level * 3.75);
+  // Quadratic formula: level² × 2.8125 (reduced by 25% from 3.75)
+  return Math.floor(level * level * 2.8125);
 }
 
 // Calculate player damage against monster

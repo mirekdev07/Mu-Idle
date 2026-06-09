@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -43,3 +44,19 @@ next-env.d.ts
 /src/generated/prisma
 
 .vercel
+
+# Android signing / build artifacts (NEVER commit)
+*.jks
+*.keystore
+*.apk
+*.aab
+android/release-key.jks
+android/keystore.properties
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+
+# Local notes
+instrukcje.md

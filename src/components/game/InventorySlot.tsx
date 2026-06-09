@@ -29,70 +29,46 @@ function getEquipmentSlotForCategory(category: number): keyof Equipment | null {
   return slot?.key ?? null;
 }
 
-function calculateItemScore(item: Item): number {
+// Calculate item's main stat (DMG or DEF) at +9 enhancement + max Jewel of Life bonus (+16)
+// Current damage/defense already includes enhancement bonus, so we calculate the difference
+function calculateStatAt9(item: Item): { value: number; type: 'dmg' | 'def' } {
   const isWeapon = item.category >= 0 && item.category <= 5;
-  const enhancementLevel = item.enhancementLevel || 0;
+  const currentEnhancement = item.enhancementLevel ?? 0;
+  const levelsToAdd = 9 - currentEnhancement;
 
-  // Base stats
-  let score = 0;
-
-  if (isWeapon) {
-    // Weapons: base damage + enhancement bonus
-    score = (item.damage_min + item.damage_max) / 2;
-    score += enhancementLevel * 3;
-  } else {
-    // Armor: base defense + enhancement bonus
-    score = item.defense;
-    score += enhancementLevel * 2;
-  }
-
-  // Add option values with weights
+  // Check current Jewel of Life bonus from options
+  let currentLifeBonus = 0;
   if (item.options && Array.isArray(item.options)) {
-    for (const option of item.options) {
-      switch (option.type) {
-        case 'extra_damage':
-        case 'craft_damage':
-          score += option.value * (isWeapon ? 1 : 0.5);
-          break;
-        case 'extra_defense':
-        case 'craft_defense':
-          score += option.value * (isWeapon ? 0.5 : 1);
-          break;
-        case 'critical_rate':
-          score += option.value * 3; // Crit is valuable
-          break;
-        case 'critical_damage':
-          score += option.value * 2;
-          break;
-        case 'life_steal':
-          score += option.value * 5; // Life steal is very valuable
-          break;
-        case 'attack_speed':
-          score += option.value * 2;
-          break;
-        case 'exp_bonus':
-          score += option.value * 1;
-          break;
-        case 'max_hp':
-          score += option.value * 2;
-          break;
-        case 'hp_recovery':
-          score += option.value * 2;
-          break;
-        case 'reflect_damage':
-          score += option.value * 3;
-          break;
-        default:
-          score += option.value;
-      }
+    const lifeOption = item.options.find(
+      (o) => o.type === 'craft_damage' || o.type === 'craft_defense'
+    );
+    if (lifeOption) {
+      currentLifeBonus = lifeOption.value || 0;
     }
   }
+  // Calculate remaining potential from Jewel of Life (max is +16)
+  const maxLifeBonus = 16;
+  const remainingLifeBonus = maxLifeBonus - currentLifeBonus;
 
-  // Rarity bonus
-  const rarityBonus = { common: 0, uncommon: 5, rare: 15, epic: 30, legendary: 50 };
-  score += rarityBonus[item.rarity as keyof typeof rarityBonus] || 0;
+  if (isWeapon) {
+    // Weapons: current avg damage + additional enhancement bonus (+3 per level) + remaining life bonus
+    const currentAvgDmg = (item.damage_min + item.damage_max) / 2;
+    const additionalBonus = levelsToAdd * 3;
+    return { value: Math.floor(currentAvgDmg + additionalBonus + remainingLifeBonus), type: 'dmg' };
+  } else {
+    // Armor: current defense + additional enhancement bonus (+2 per level) + remaining life bonus
+    const additionalBonus = levelsToAdd * 2;
+    return { value: Math.floor(item.defense + additionalBonus + remainingLifeBonus), type: 'def' };
+  }
+}
 
-  return score;
+interface ComparisonResult {
+  isBetter: boolean;
+  isWorse: boolean;
+  itemValue: number;
+  equippedValue: number;
+  statType: 'dmg' | 'def' | 'acc';
+  isAccessory: boolean;
 }
 
 function calculateAccessoryValue(item: Item): number {
@@ -118,25 +94,42 @@ function calculateAccessoryValue(item: Item): number {
   return value;
 }
 
-function compareToEquipped(item: Item, equipment: Equipment): { isBetter: boolean; isWorse: boolean } {
+function compareToEquipped(item: Item, equipment: Equipment): ComparisonResult | null {
   const slotKey = getEquipmentSlotForCategory(item.category);
-  if (!slotKey) return { isBetter: false, isWorse: false };
+  if (!slotKey) return null;
 
   const equippedItem = equipment[slotKey];
-  if (!equippedItem) return { isBetter: true, isWorse: false };
 
   const isAccessory = item.category === 12 || item.category === 13;
+
   if (isAccessory) {
-    const diff = calculateAccessoryValue(item) - calculateAccessoryValue(equippedItem);
-    return { isBetter: diff > 0, isWorse: diff < 0 };
+    const itemValue = calculateAccessoryValue(item);
+    const equippedValue = equippedItem ? calculateAccessoryValue(equippedItem) : 0;
+    const diff = itemValue - equippedValue;
+    return {
+      isBetter: diff > 0,
+      isWorse: diff < 0,
+      itemValue,
+      equippedValue,
+      statType: 'acc',
+      isAccessory: true
+    };
   }
 
-  // Use unified score for all equipment
-  const itemScore = calculateItemScore(item);
-  const equippedScore = calculateItemScore(equippedItem);
-  const diff = itemScore - equippedScore;
+  // Calculate stats at +9 for both items (ONLY DMG or DEF, no options)
+  const itemAt9 = calculateStatAt9(item);
+  const equippedAt9 = equippedItem ? calculateStatAt9(equippedItem) : { value: 0, type: itemAt9.type };
 
-  return { isBetter: diff > 0, isWorse: diff < 0 };
+  const diff = itemAt9.value - equippedAt9.value;
+
+  return {
+    isBetter: diff > 0,
+    isWorse: diff < 0,
+    itemValue: itemAt9.value,
+    equippedValue: equippedAt9.value,
+    statType: itemAt9.type,
+    isAccessory: false
+  };
 }
 
 export default function InventorySlot({
@@ -216,15 +209,20 @@ export default function InventorySlot({
           </span>
         )}
 
-        {/* Comparison indicator */}
+        {/* Comparison indicator - shows stat at +9 */}
         {comparison && (comparison.isBetter || comparison.isWorse) && (
-          <span
-            className={`absolute -bottom-0.5 -left-0.5 text-[9px] font-bold px-0.5 rounded ${
+          <div
+            className={`absolute -bottom-1 left-1/2 -translate-x-1/2 text-[8px] font-bold px-1 rounded whitespace-nowrap ${
               comparison.isBetter ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
             }`}
+            title={comparison.isAccessory
+              ? `This: ${comparison.itemValue} vs Equipped: ${comparison.equippedValue}`
+              : `+9: ${comparison.itemValue} ${comparison.statType.toUpperCase()} vs Equipped +9: ${comparison.equippedValue} ${comparison.statType.toUpperCase()}`
+            }
           >
             {comparison.isBetter ? '▲' : '▼'}
-          </span>
+            {!comparison.isAccessory && `+9`}
+          </div>
         )}
       </div>
 

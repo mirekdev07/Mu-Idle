@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { Item, Equipment, EQUIPMENT_SLOTS } from '@/types/game';
+import { Item, Equipment } from '@/types/game';
 import { getItemImagePath, getItemImageSize } from '@/lib/game/itemImages';
 
 interface ItemModalProps {
@@ -31,91 +31,6 @@ const SLOT_NAMES: Record<number, string> = {
   12: 'Ring', 13: 'Pendant',
 };
 
-function getEquipmentSlotForCategory(category: number): keyof Equipment | null {
-  const slot = EQUIPMENT_SLOTS.find((s) => s.categories.includes(category));
-  return slot?.key ?? null;
-}
-
-function calculateItemScore(item: Item): number {
-  const isWeapon = item.category >= 0 && item.category <= 5;
-  const enhancementLevel = item.enhancementLevel || 0;
-
-  // Base stats
-  let score = 0;
-
-  if (isWeapon) {
-    score = (item.damage_min + item.damage_max) / 2;
-    score += enhancementLevel * 3;
-  } else {
-    score = item.defense;
-    score += enhancementLevel * 2;
-  }
-
-  // Add option values with weights
-  if (item.options && Array.isArray(item.options)) {
-    for (const option of item.options) {
-      switch (option.type) {
-        case 'extra_damage':
-        case 'craft_damage':
-          score += option.value * (isWeapon ? 1 : 0.5);
-          break;
-        case 'extra_defense':
-        case 'craft_defense':
-          score += option.value * (isWeapon ? 0.5 : 1);
-          break;
-        case 'critical_rate':
-          score += option.value * 3;
-          break;
-        case 'critical_damage':
-          score += option.value * 2;
-          break;
-        case 'life_steal':
-          score += option.value * 5;
-          break;
-        case 'attack_speed':
-          score += option.value * 2;
-          break;
-        case 'exp_bonus':
-          score += option.value * 1;
-          break;
-        case 'max_hp':
-          score += option.value * 2;
-          break;
-        case 'hp_recovery':
-          score += option.value * 2;
-          break;
-        case 'reflect_damage':
-          score += option.value * 3;
-          break;
-        default:
-          score += option.value;
-      }
-    }
-  }
-
-  // Rarity bonus
-  const rarityBonus = { common: 0, uncommon: 5, rare: 15, epic: 30, legendary: 50 };
-  score += rarityBonus[item.rarity as keyof typeof rarityBonus] || 0;
-
-  return score;
-}
-
-function compareToEquipped(item: Item, equipment: Equipment): { isBetter: boolean; isWorse: boolean; diff: number } | null {
-  const slotKey = getEquipmentSlotForCategory(item.category);
-  if (!slotKey) return null;
-
-  const equippedItem = equipment[slotKey];
-  if (!equippedItem) {
-    return { isBetter: true, isWorse: false, diff: 1 };
-  }
-
-  const itemScore = calculateItemScore(item);
-  const equippedScore = calculateItemScore(equippedItem);
-  const diff = itemScore - equippedScore;
-
-  return { isBetter: diff > 0, isWorse: diff < 0, diff: Math.round(diff) };
-}
-
 export default function ItemModal({
   item,
   equipment,
@@ -129,7 +44,6 @@ export default function ItemModal({
 }: ItemModalProps) {
   const rarity = item.rarity || 'common';
   const colors = RARITY_COLORS[rarity] || RARITY_COLORS.common;
-  const comparison = !isEquipped && equipment ? compareToEquipped(item, equipment) : null;
   const isAccessory = item.category === 12 || item.category === 13;
 
   return (
@@ -165,23 +79,6 @@ export default function ItemModal({
             </div>
           </div>
 
-          {/* Comparison indicator */}
-          {comparison && (comparison.isBetter || comparison.isWorse) && (
-            <div className={`mt-2 text-sm font-bold ${comparison.isBetter ? 'text-green-400' : 'text-red-400'}`}>
-              {comparison.isBetter ? '▲ Better than equipped' : '▼ Worse than equipped'}
-              {comparison.diff !== 0 && ` (${comparison.diff > 0 ? '+' : ''}${comparison.diff})`}
-            </div>
-          )}
-          {comparison && !comparison.isBetter && !comparison.isWorse && (
-            <div className="mt-2 text-sm text-gray-400">
-              = Same as equipped
-            </div>
-          )}
-          {!isEquipped && equipment && !equipment[getEquipmentSlotForCategory(item.category) as keyof Equipment] && (
-            <div className="mt-2 text-sm text-green-400">
-              ▲ No item equipped in this slot
-            </div>
-          )}
         </div>
 
         {/* Stats */}

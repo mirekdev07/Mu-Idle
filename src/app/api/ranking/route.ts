@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       resetCount: char.resetCount,
       monstersKilled: char.monstersKilled,
       deaths: char.deaths,
+      towerMaxFloor: char.towerMaxFloor,
     }));
 
     return NextResponse.json({

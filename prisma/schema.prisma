@@ -97,11 +97,42 @@ model PlayerCharacter {
   // Helpers system
   helperAttackerLevel Int @default(0) @map("helper_attacker_level") // Attacks 2x per second
   helperBufferLevel   Int @default(0) @map("helper_buffer_level")   // +0.1% DMG per level, max 100
+  bufferActiveUntil   DateTime? @map("buffer_active_until")         // When buff expires
+  bufferCooldownEnd   DateTime? @map("buffer_cooldown_end")         // When cooldown ends
 
   // Daily event entries (reset daily, per character)
   bloodCastleEntriesToday Int      @default(0) @map("blood_castle_entries_today")
   devilSquareEntriesToday Int      @default(0) @map("devil_square_entries_today")
   lastEventResetDate      DateTime? @map("last_event_reset_date")
+
+  // Boss kills tracking
+  boss1KillsToday     Int       @default(0) @map("boss1_kills_today")
+  boss2KillsToday     Int       @default(0) @map("boss2_kills_today")
+  lastBossResetDate   DateTime? @map("last_boss_reset_date")
+
+  // Daily Quests tracking
+  questKillsToday     Int       @default(0) @map("quest_kills_today")
+  questExpToday       BigInt    @default(0) @map("quest_exp_today")
+  questEventToday     Boolean   @default(false) @map("quest_event_today")
+  questBossToday      Boolean   @default(false) @map("quest_boss_today")
+  questCraftToday     Boolean   @default(false) @map("quest_craft_today")
+  questResetToday     Boolean   @default(false) @map("quest_reset_today")
+  lastQuestResetDate  DateTime? @map("last_quest_reset_date")
+  claimedQuests       String    @default("[]") @map("claimed_quests") @db.Text
+
+  // Achievements tracking (lifetime stats)
+  totalBossKills         Int     @default(0) @map("total_boss_kills")
+  totalEventEntries      Int     @default(0) @map("total_event_entries")
+  maxEnhancement         Int     @default(0) @map("max_enhancement")
+  unlockedAchievements   String  @default("[]") @map("unlocked_achievements") @db.Text
+  claimedAchievements    String  @default("[]") @map("claimed_achievements") @db.Text
+
+  // Endless Tower
+  towerFloor           Int       @default(1) @map("tower_floor")
+  towerMaxFloor        Int       @default(0) @map("tower_max_floor")
+  towerEntriesToday    Int       @default(0) @map("tower_entries_today")
+  lastTowerResetDate   DateTime? @map("last_tower_reset_date")
+  towerInProgress      Boolean   @default(false) @map("tower_in_progress")
 
   // Relations
   user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)

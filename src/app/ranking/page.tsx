@@ -12,6 +12,7 @@ interface RankingEntry {
   resetCount: number;
   monstersKilled: number;
   deaths: number;
+  towerMaxFloor: number;
 }
 
 export default function RankingPage() {
@@ -55,8 +56,8 @@ export default function RankingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-gray-900/95 backdrop-blur border-b border-gray-700 p-4">
+      {/* Mobile Header - hidden on desktop (has global menu) */}
+      <header className="lg:hidden sticky top-0 z-30 bg-gray-900/95 backdrop-blur border-b border-gray-700 p-4">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <Link href="/" className="text-xl sm:text-2xl font-bold text-yellow-400 hover:text-yellow-300">
@@ -194,11 +195,17 @@ export default function RankingPage() {
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
                 <div className="bg-gray-900/50 rounded p-2">
                   <div className="text-gray-400">Resets</div>
                   <div className={entry.resetCount > 0 ? 'text-purple-400 font-bold' : 'text-gray-600'}>
                     {entry.resetCount}
+                  </div>
+                </div>
+                <div className="bg-gray-900/50 rounded p-2">
+                  <div className="text-gray-400">Tower</div>
+                  <div className={entry.towerMaxFloor > 0 ? 'text-cyan-400 font-bold' : 'text-gray-600'}>
+                    {entry.towerMaxFloor > 0 ? `F${entry.towerMaxFloor}` : '-'}
                   </div>
                 </div>
                 <div className="bg-gray-900/50 rounded p-2">
@@ -227,6 +234,7 @@ export default function RankingPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Class</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Level</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Resets</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tower</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Kills</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Deaths</th>
               </tr>
@@ -265,13 +273,20 @@ export default function RankingPage() {
                       <span className="text-gray-600">0</span>
                     )}
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {entry.towerMaxFloor > 0 ? (
+                      <span className="text-cyan-400">F{entry.towerMaxFloor}</span>
+                    ) : (
+                      <span className="text-gray-600">-</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-gray-400">{entry.monstersKilled.toLocaleString()}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-red-400">{entry.deaths.toLocaleString()}</td>
                 </tr>
               ))}
               {ranking.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No players found</td>
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500">No players found</td>
                 </tr>
               )}
             </tbody>

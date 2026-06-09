@@ -5,14 +5,15 @@ import prisma from '@/lib/prisma';
 
 // Helper upgrade costs - exponential scaling (very expensive)
 function getHelperUpgradeCost(currentLevel: number, helperType: 'attacker' | 'buffer'): bigint {
-  const baseCost = helperType === 'attacker' ? 100000n : 50000n; // Attacker more expensive
-  // Cost formula: base * (level + 1)^2.5
+  const baseCost = helperType === 'attacker' ? 100000n : 50000n;
   const multiplier = Math.floor(Math.pow(currentLevel + 1, 2.5));
   return baseCost * BigInt(multiplier);
 }
 
 // Buffer max level is 100 (10% max bonus)
 const BUFFER_MAX_LEVEL = 100;
+const BUFFER_DURATION_MS = 2 * 60 * 1000; // 2 minutes
+const BUFFER_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function GET(request: NextRequest) {
   const userId = await getCurrentUserId();
@@ -33,6 +34,10 @@ export async function GET(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
+    const now = new Date();
+    const bufferActive = character.bufferActiveUntil && character.bufferActiveUntil > now;
+    const bufferOnCooldown = character.bufferCooldownEnd && character.bufferCooldownEnd > now;
+
     const attackerCost = getHelperUpgradeCost(character.helperAttackerLevel, 'attacker');
     const bufferCost = getHelperUpgradeCost(character.helperBufferLevel, 'buffer');
 
@@ -42,15 +47,18 @@ export async function GET(request: NextRequest) {
         attacker: {
           level: character.helperAttackerLevel,
           upgradeCost: attackerCost.toString(),
-          // Attacker damage scales with level: base 5 + level * 2
-          damage: 5 + character.helperAttackerLevel * 2,
+          // Attacker damage: base 50 + level × 20 (10x stronger)
+          damage: 50 + character.helperAttackerLevel * 20,
         },
         buffer: {
           level: character.helperBufferLevel,
           maxLevel: BUFFER_MAX_LEVEL,
           upgradeCost: bufferCost.toString(),
-          // Buffer gives 0.1% DMG per level
           damageBonus: character.helperBufferLevel * 0.1,
+          isActive: bufferActive,
+          activeUntil: character.bufferActiveUntil?.toISOString() ?? null,
+          isOnCooldown: bufferOnCooldown,
+          cooldownEnd: character.bufferCooldownEnd?.toISOString() ?? null,
         },
       },
     });
@@ -66,11 +74,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { character_id, helper_type } = body;
-
-    if (!helper_type || !['attacker', 'buffer'].includes(helper_type)) {
-      return errorResponse('Invalid helper type', 400);
-    }
+    const { character_id, helper_type, action } = body;
 
     let character;
     if (character_id) {
@@ -83,23 +87,59 @@ export async function POST(request: NextRequest) {
       return errorResponse('Character not found', 404);
     }
 
+    // Handle buffer activation
+    if (action === 'activate_buffer') {
+      const now = new Date();
+
+      // Check if on cooldown
+      if (character.bufferCooldownEnd && character.bufferCooldownEnd > now) {
+        return errorResponse('Buffer is on cooldown', 400);
+      }
+
+      // Check if buffer level > 0
+      if (character.helperBufferLevel <= 0) {
+        return errorResponse('Buffer helper not unlocked', 400);
+      }
+
+      const activeUntil = new Date(now.getTime() + BUFFER_DURATION_MS);
+      const cooldownEnd = new Date(now.getTime() + BUFFER_COOLDOWN_MS);
+
+      await prisma.playerCharacter.update({
+        where: { id: character.id },
+        data: {
+          bufferActiveUntil: activeUntil,
+          bufferCooldownEnd: cooldownEnd,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        action: 'activate_buffer',
+        activeUntil: activeUntil.toISOString(),
+        cooldownEnd: cooldownEnd.toISOString(),
+        damageBonus: character.helperBufferLevel * 0.1,
+      });
+    }
+
+    // Handle upgrade
+    if (!helper_type || !['attacker', 'buffer'].includes(helper_type)) {
+      return errorResponse('Invalid helper type', 400);
+    }
+
     const currentLevel = helper_type === 'attacker'
       ? character.helperAttackerLevel
       : character.helperBufferLevel;
 
-    // Check max level for buffer
     if (helper_type === 'buffer' && currentLevel >= BUFFER_MAX_LEVEL) {
       return errorResponse('Buffer helper is at max level', 400);
     }
 
     const upgradeCost = getHelperUpgradeCost(currentLevel, helper_type);
 
-    // Check if player has enough zen
     if (character.zen < upgradeCost) {
       return errorResponse('Not enough Zen', 400);
     }
 
-    // Upgrade helper
     const fieldToUpdate = helper_type === 'attacker' ? 'helperAttackerLevel' : 'helperBufferLevel';
 
     const updatedCharacter = await prisma.playerCharacter.update({
@@ -122,9 +162,8 @@ export async function POST(request: NextRequest) {
       newLevel,
       zen: updatedCharacter.zen.toString(),
       nextUpgradeCost: nextCost.toString(),
-      // Return updated stats
       stats: helper_type === 'attacker'
-        ? { damage: 5 + newLevel * 2 }
+        ? { damage: 50 + newLevel * 20 }
         : { damageBonus: newLevel * 0.1 },
     });
   } catch (error) {

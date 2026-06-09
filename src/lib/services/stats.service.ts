@@ -113,9 +113,11 @@ export async function getEquipmentBonuses(characterId: number): Promise<Equipmen
               bonuses.life_steal += option.value;
               break;
             case 'extra_damage':
+            case 'damage_percent':  // Wings use this type
               bonuses.damage_percent += option.value;
               break;
             case 'extra_defense':
+            case 'defense_percent':  // Wings use this type
               bonuses.defense_percent += option.value;
               break;
             case 'exp_bonus':
@@ -177,10 +179,10 @@ export function calculateStats(
     maxDamage = Math.floor(maxDamage * (1 + bonuses.damage_percent / 100));
   }
 
-  // Apply ascension damage bonus (+2% per point)
+  // Apply ascension damage bonus (+0.2% per point)
   if (ascDamage > 0) {
-    minDamage = Math.floor(minDamage * (1 + ascDamage * 2 / 100));
-    maxDamage = Math.floor(maxDamage * (1 + ascDamage * 2 / 100));
+    minDamage = Math.floor(minDamage * (1 + ascDamage * 0.2 / 100));
+    maxDamage = Math.floor(maxDamage * (1 + ascDamage * 0.2 / 100));
   }
 
   // DEF stat: each level adds 1 defense
@@ -213,17 +215,17 @@ export function calculateStats(
     maxHp = Math.floor(maxHp * (1 + bonuses.max_hp / 100));
   }
 
-  // Apply ascension health bonus (+5% per point)
+  // Apply ascension health bonus (+0.2% per point)
   if (ascHealth > 0) {
-    maxHp = Math.floor(maxHp * (1 + ascHealth * 5 / 100));
+    maxHp = Math.floor(maxHp * (1 + ascHealth * 0.2 / 100));
   }
 
   // Max Mana: based on vitality and level
   const maxMana = Math.floor(50 + character.vitality * 5 + character.level * 10);
 
-  // Critical Rate: base 5% + level bonus + equipment + ascension (+1% per point)
+  // Critical Rate: base 5% + level bonus + equipment + ascension (+0.2% per point)
   const baseCritRate = Math.floor(Math.min(25, 5 + character.level / 50));
-  const criticalRate = Math.min(50, baseCritRate + bonuses.critical_rate + ascCritical);
+  const criticalRate = Math.min(50, baseCritRate + bonuses.critical_rate + ascCritical * 0.2);
 
   // Critical Damage: base 150% + equipment bonus
   const criticalDamage = 150 + bonuses.critical_damage;
@@ -241,17 +243,17 @@ export function calculateStats(
     finalHpRecovery = Math.floor(baseHpRecovery * (1 + bonuses.hp_recovery / 100));
   }
 
-  // Life steal: equipment + ascension (+0.5% per point)
-  const lifeSteal = bonuses.life_steal + ascLifeSteal * 0.5;
+  // Life steal: equipment + ascension (+0.1% per point)
+  const lifeSteal = bonuses.life_steal + ascLifeSteal * 0.1;
 
-  // EXP bonus: equipment + ascension (+2% per point)
-  const expBonus = bonuses.exp_bonus + ascExp * 2;
+  // EXP bonus: equipment + ascension (+0.5% per point)
+  const expBonus = bonuses.exp_bonus + ascExp * 0.5;
 
-  // Zen bonus: equipment + ascension (+3% per point)
-  const zenBonus = bonuses.zen_bonus + ascZen * 3;
+  // Zen bonus: equipment + ascension (+0.5% per point)
+  const zenBonus = bonuses.zen_bonus + ascZen * 0.5;
 
-  // Poison chance: ascension only (+0.5% per point)
-  const poisonChance = ascPoison * 0.5;
+  // Poison chance: ascension only (+0.2% per point)
+  const poisonChance = ascPoison * 0.2;
 
   // Excellent chance: base 5% + ascension (+0.25% per point)
   const excellentChance = 5 + ascExcellent * 0.25;

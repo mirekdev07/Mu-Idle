@@ -306,6 +306,33 @@ export async function POST(request: NextRequest) {
         where: { id: inventoryItem.id },
         data: updateData,
       });
+
+      // Check if item reached +9 for quest and update max enhancement for achievements
+      const newEnhancement = (updateData.enhancementLevel as number) || currentLevel;
+
+      // Get current max enhancement
+      const charData = await prisma.playerCharacter.findUnique({
+        where: { id: character.id },
+        select: { maxEnhancement: true },
+      });
+
+      const updateCharData: Record<string, unknown> = {};
+
+      if (newEnhancement >= 9) {
+        updateCharData.questCraftToday = true;
+      }
+
+      // Update max enhancement if this is higher
+      if (newEnhancement > (charData?.maxEnhancement || 0)) {
+        updateCharData.maxEnhancement = newEnhancement;
+      }
+
+      if (Object.keys(updateCharData).length > 0) {
+        await prisma.playerCharacter.update({
+          where: { id: character.id },
+          data: updateCharData,
+        });
+      }
     }
 
     // Get updated user jewels

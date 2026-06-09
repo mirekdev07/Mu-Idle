@@ -31,8 +31,8 @@ function getItemEmoji(category: number): string {
 function generateRandomOption(category: number | null, rarity: ItemRarity): ItemOption[] {
   const allOptions: ItemOption[] = [
     { type: 'critical_rate', value: 2, display: '+2% Critical Rate' },
-    { type: 'attack_speed', value: 10, display: '+10% Attack Speed' },
-    { type: 'life_steal', value: 2, display: '+2% Life Steal' },
+    { type: 'attack_speed', value: 2, display: '+2% Attack Speed' },
+    { type: 'life_steal', value: 0.5, display: '+0.5% Life Steal' },
     { type: 'extra_damage', value: 5, display: '+5% Extra Damage' },
     { type: 'extra_defense', value: 10, display: '+10% Extra Defense' },
     { type: 'exp_bonus', value: 10, display: '+10% EXP' },
@@ -208,6 +208,104 @@ export async function addItemToInventory(
   });
 
   return { success: true, slotIndex: emptySlot };
+}
+
+// Special drop function for bosses - drops items within a level range with guaranteed options
+export async function getRandomItemDropForBoss(
+  minLevel: number,
+  maxLevel: number,
+  forceOptions: boolean = true
+): Promise<DroppedItem | null> {
+  const items = await prisma.item.findMany({
+    where: {
+      level: {
+        gte: minLevel,
+        lte: maxLevel,
+      },
+      // Exclude Chaos Items (14) and Wings (15+)
+      category: {
+        lt: 14,
+      },
+    },
+  });
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const randomItem = items[Math.floor(Math.random() * items.length)];
+
+  const isWeapon = randomItem.category >= 0 && randomItem.category <= 5;
+  const isArmor = randomItem.category >= 6 && randomItem.category <= 11;
+  const isAccessory = randomItem.category === 12 || randomItem.category === 13;
+
+  // Boss drops always have enhancement +5 to +9
+  let enhancement = 0;
+  if (!isAccessory) {
+    const enhanceRoll = Math.floor(Math.random() * 100) + 1;
+    if (enhanceRoll <= 5) {
+      enhancement = 9;
+    } else if (enhanceRoll <= 15) {
+      enhancement = 8;
+    } else if (enhanceRoll <= 35) {
+      enhancement = 7;
+    } else if (enhanceRoll <= 65) {
+      enhancement = 6;
+    } else {
+      enhancement = 5;
+    }
+  }
+
+  const damageBonus = isWeapon ? enhancement * 3 : 0;
+  const defenseBonus = isArmor ? enhancement * 2 : 0;
+
+  const damageMin = isWeapon ? randomItem.damageMin + damageBonus : 0;
+  const damageMax = isWeapon ? randomItem.damageMax + damageBonus : 0;
+  const defense = isArmor ? randomItem.defenseValue + defenseBonus : 0;
+  const name = randomItem.name.replace(/\s*\+\d+$/, '');
+
+  // Boss drops always have options (rare quality = 2 options)
+  let rarity: ItemRarity;
+  let options: ItemOption[] | null = null;
+
+  if (forceOptions) {
+    // 50% rare (2 options), 50% uncommon (1 option)
+    const rarityRoll = Math.floor(Math.random() * 100) + 1;
+    if (rarityRoll <= 50) {
+      rarity = 'rare';
+      options = generateRandomOption(randomItem.category, 'rare');
+    } else {
+      rarity = 'uncommon';
+      options = generateRandomOption(randomItem.category, 'uncommon');
+    }
+  } else {
+    const rarityRoll = Math.floor(Math.random() * 100) + 1;
+    if (rarityRoll <= 10) {
+      rarity = 'rare';
+      options = generateRandomOption(randomItem.category, 'rare');
+    } else if (rarityRoll <= 30) {
+      rarity = 'uncommon';
+      options = generateRandomOption(randomItem.category, 'uncommon');
+    } else {
+      rarity = 'common';
+    }
+  }
+
+  return {
+    id: randomItem.id,
+    name,
+    type: randomItem.type.toString(),
+    level: randomItem.level,
+    damageMin,
+    damageMax,
+    attackSpeed: isWeapon ? randomItem.attackSpeed : 0,
+    defense,
+    category: randomItem.category,
+    emoji: randomItem.emoji ?? getItemEmoji(randomItem.category),
+    rarity,
+    enhancementLevel: enhancement,
+    options,
+  };
 }
 
 export { getItemEmoji };

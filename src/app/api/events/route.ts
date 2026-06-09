@@ -95,6 +95,12 @@ export async function POST(request: NextRequest) {
       characterUpdateData.devilSquareEntriesToday = (needsReset ? 0 : devilSquareEntries) + 1;
     }
 
+    // Mark quest as completed (event entered)
+    characterUpdateData.questEventToday = true;
+
+    // Increment total event entries for achievements
+    characterUpdateData.totalEventEntries = { increment: 1 };
+
     // Update user tickets and character entries in parallel
     const [updatedUser, updatedCharacter] = await Promise.all([
       prisma.user.update({

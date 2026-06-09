@@ -57,6 +57,8 @@ interface CharacterData {
   // Helpers system
   helperAttackerLevel: number;
   helperBufferLevel: number;
+  bufferActiveUntil: string | null;
+  bufferCooldownEnd: string | null;
 }
 
 interface UpgradeCosts {
@@ -199,6 +201,10 @@ export default function HomePage() {
   const [localMonstersKilled, setLocalMonstersKilled] = useState(0);
   const [localDeaths, setLocalDeaths] = useState(0);
 
+  // Track pending quest progress (kills and exp since last save)
+  const pendingKillsRef = useRef(0);
+  const pendingExpRef = useRef(0);
+
   // Mobile tab state
   const [activeTab, setActiveTab] = useState<'hunt' | 'character' | 'inventory'>('hunt');
 
@@ -207,6 +213,72 @@ export default function HomePage() {
 
   // Ascension panel visibility
   const [showAscensionPanel, setShowAscensionPanel] = useState(false);
+
+  // Daily Quests panel visibility
+  const [showQuestsPanel, setShowQuestsPanel] = useState(false);
+  const [quests, setQuests] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    target: number;
+    type: string;
+    rewards: { zen?: number; jewelOfBless?: number; jewelOfSoul?: number; jewelOfLife?: number; jewelOfChaos?: number; bloodCastleTicket?: number; devilSquareTicket?: number };
+    icon: string;
+    color: string;
+    progress: number;
+    completed: boolean;
+    claimed: boolean;
+  }>>([]);
+
+  // Achievements panel visibility
+  const [showAchievementsPanel, setShowAchievementsPanel] = useState(false);
+  const [achievements, setAchievements] = useState<Array<{
+    id: string;
+    name: string;
+    description: string;
+    category: string;
+    requirement: { type: string; value: number };
+    rewards: { zen?: number; jewelOfBless?: number; jewelOfSoul?: number; jewelOfLife?: number; jewelOfChaos?: number };
+    icon: string;
+    rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+    currentValue: number;
+    unlocked: boolean;
+    claimed: boolean;
+  }>>([]);
+
+  // Endless Tower
+  const [showTowerPanel, setShowTowerPanel] = useState(false);
+  const [towerState, setTowerState] = useState<{
+    floor: number;
+    maxFloor: number;
+    entriesToday: number;
+    maxEntries: number;
+    inProgress: boolean;
+    monster: { name: string; emoji: string; hp: number; minDamage: number; maxDamage: number; exp: number; zen: number } | null;
+    monsterCurrentHp: number;
+    playerCurrentHp: number;
+    isRunning: boolean;
+    floatingDamages: { id: number; damage: number; type: 'player' | 'monster' | 'heal'; x: number; y: number }[];
+    lastRewards: { exp: number; zen: number } | null;
+  }>({
+    floor: 1,
+    maxFloor: 0,
+    entriesToday: 0,
+    maxEntries: 2,
+    inProgress: false,
+    monster: null,
+    monsterCurrentHp: 0,
+    playerCurrentHp: 0,
+    isRunning: false,
+    floatingDamages: [],
+    lastRewards: null,
+  });
+  const towerDamageIdRef = useRef(0);
+  const towerCombatRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Buffer cooldown and active timers
+  const [bufferCooldownRemaining, setBufferCooldownRemaining] = useState(0);
+  const [bufferActiveRemaining, setBufferActiveRemaining] = useState(0);
 
   // Crafting panel ref for mobile scroll
   const craftingPanelRef = useRef<HTMLDivElement>(null);
@@ -269,6 +341,10 @@ export default function HomePage() {
 
     const saveProgress = async (updateHeartbeat = true) => {
       try {
+        // Capture pending quest data before reset
+        const killsToSend = pendingKillsRef.current;
+        const expToSend = pendingExpRef.current;
+
         await fetch('/api/game/progress', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -283,8 +359,16 @@ export default function HomePage() {
             exp_per_second: expPerSecond > 0 ? expPerSecond : undefined,
             zen_per_second: zenPerSecond > 0 ? zenPerSecond : undefined,
             update_heartbeat: updateHeartbeat,
+            // Quest tracking
+            kills_gained: killsToSend,
+            exp_gained: expToSend,
           }),
         });
+
+        // Reset pending quest data after successful save
+        pendingKillsRef.current = 0;
+        pendingExpRef.current = 0;
+
         console.log('Progress saved');
       } catch (err) {
         console.error('Auto-save failed:', err);
@@ -303,8 +387,14 @@ export default function HomePage() {
         exp_per_second: expPerSecond > 0 ? expPerSecond : undefined,
         zen_per_second: zenPerSecond > 0 ? zenPerSecond : undefined,
         update_heartbeat: false,
+        // Quest tracking
+        kills_gained: pendingKillsRef.current,
+        exp_gained: pendingExpRef.current,
       };
       navigator.sendBeacon('/api/game/progress', JSON.stringify(data));
+      // Reset pending quest data
+      pendingKillsRef.current = 0;
+      pendingExpRef.current = 0;
     };
 
     const saveInterval = setInterval(saveProgress, 30000);
@@ -337,6 +427,41 @@ export default function HomePage() {
     };
   }, [gameData, localMonstersKilled, localDeaths, expPerSecond, zenPerSecond]);
 
+  // Buffer cooldown and active timer
+  useEffect(() => {
+    if (!gameData) return;
+
+    const updateBufferTimers = () => {
+      const now = Date.now();
+
+      // Update cooldown remaining
+      if (gameData.character.bufferCooldownEnd) {
+        const cooldownEnd = new Date(gameData.character.bufferCooldownEnd).getTime();
+        const remaining = Math.max(0, Math.ceil((cooldownEnd - now) / 1000));
+        setBufferCooldownRemaining(remaining);
+      } else {
+        setBufferCooldownRemaining(0);
+      }
+
+      // Update active remaining
+      if (gameData.character.bufferActiveUntil) {
+        const activeEnd = new Date(gameData.character.bufferActiveUntil).getTime();
+        const remaining = Math.max(0, Math.ceil((activeEnd - now) / 1000));
+        setBufferActiveRemaining(remaining);
+      } else {
+        setBufferActiveRemaining(0);
+      }
+    };
+
+    // Update immediately
+    updateBufferTimers();
+
+    // Update every second
+    const interval = setInterval(updateBufferTimers, 1000);
+
+    return () => clearInterval(interval);
+  }, [gameData]);
+
   const handleHpChange = async (newHp: number) => {
     setCurrentHp(newHp);
     if (gameData) {
@@ -358,6 +483,9 @@ export default function HomePage() {
   const handleExpGain = async (exp: bigint, zen: bigint) => {
     if (!gameData) return;
 
+    // Track exp for quests
+    pendingExpRef.current += Number(exp);
+
     const newExp = BigInt(gameData.character.experience) + exp;
     let newZen = BigInt(gameData.character.zen) + zen;
 
@@ -377,15 +505,15 @@ export default function HomePage() {
     }
     setLastExpUpdate({ exp: newExp, zen: newZen, time: now });
 
-    // Check for level up (quadratic formula: level² × 3.75 exp needed)
+    // Check for level up (quadratic formula: level² × 2.8125 exp needed - reduced 25%)
     // Max level is 400
     const MAX_LEVEL = 400;
     let newLevel = gameData.character.level;
     let remainingExp = newExp;
     let levelsGained = 0;
 
-    while (remainingExp >= BigInt(Math.floor(newLevel * newLevel * 3.75)) && newLevel < MAX_LEVEL) {
-      remainingExp -= BigInt(Math.floor(newLevel * newLevel * 3.75));
+    while (remainingExp >= BigInt(Math.floor(newLevel * newLevel * 2.8125)) && newLevel < MAX_LEVEL) {
+      remainingExp -= BigInt(Math.floor(newLevel * newLevel * 2.8125));
       newLevel++;
       levelsGained++;
     }
@@ -545,6 +673,7 @@ export default function HomePage() {
 
   const handleMonsterKill = () => {
     setLocalMonstersKilled((prev) => prev + 1);
+    pendingKillsRef.current += 1;
   };
 
   const handleJewelDrop = async (type: 'bless' | 'soul' | 'life' | 'chaos' | 'archangel' | 'bloodbone' | 'devilskey' | 'devilseye' | 'feather') => {
@@ -680,6 +809,37 @@ export default function HomePage() {
     }
   };
 
+  const handleActivateBuffer = async () => {
+    if (!gameData) return;
+
+    try {
+      const response = await fetch('/api/character/helpers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: gameData.character.id,
+          action: 'activate_buffer',
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setGameData({
+          ...gameData,
+          character: {
+            ...gameData.character,
+            bufferActiveUntil: data.activeUntil,
+            bufferCooldownEnd: data.cooldownEnd,
+          },
+        });
+      } else {
+        console.error('Activate buffer failed:', data.message);
+      }
+    } catch (err) {
+      console.error('Activate buffer failed:', err);
+    }
+  };
+
   const handleReset = async () => {
     if (!gameData || gameData.character.level < 400) return;
 
@@ -720,6 +880,384 @@ export default function HomePage() {
       console.error('Reset failed:', err);
     }
   };
+
+  // Load daily quests
+  const loadQuests = useCallback(async () => {
+    if (!gameData) return;
+    try {
+      const response = await fetch(`/api/quests?characterId=${gameData.character.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setQuests(data.quests);
+      }
+    } catch (err) {
+      console.error('Failed to load quests:', err);
+    }
+  }, [gameData]);
+
+  // Claim quest reward
+  const handleClaimQuest = async (questId: string) => {
+    if (!gameData) return;
+    try {
+      const response = await fetch('/api/quests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          characterId: gameData.character.id,
+          questId,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        showInfo({ title: 'Quest Complete!', message: data.message, color: 'green' });
+        await loadQuests();
+        await loadGameData(); // Reload to get updated jewels/zen
+      } else {
+        showInfo({ title: 'Error', message: data.error || 'Failed to claim quest', color: 'red' });
+      }
+    } catch (err) {
+      console.error('Failed to claim quest:', err);
+    }
+  };
+
+  // Load achievements
+  const loadAchievements = useCallback(async () => {
+    if (!gameData) return;
+    try {
+      const response = await fetch(`/api/achievements?characterId=${gameData.character.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setAchievements(data.achievements);
+      }
+    } catch (err) {
+      console.error('Failed to load achievements:', err);
+    }
+  }, [gameData]);
+
+  // Claim achievement reward
+  const handleClaimAchievement = async (achievementId: string) => {
+    if (!gameData) return;
+    try {
+      const response = await fetch('/api/achievements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          characterId: gameData.character.id,
+          achievementId,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        showInfo({ title: 'Achievement Claimed!', message: data.message, color: 'green' });
+        await loadAchievements();
+        await loadGameData();
+      } else {
+        showInfo({ title: 'Error', message: data.error || 'Failed to claim achievement', color: 'red' });
+      }
+    } catch (err) {
+      console.error('Failed to claim achievement:', err);
+    }
+  };
+
+  // Load achievements when panel opens
+  useEffect(() => {
+    if (showAchievementsPanel && gameData) {
+      loadAchievements();
+    }
+  }, [showAchievementsPanel, gameData, loadAchievements]);
+
+  // Endless Tower functions
+  const loadTowerStatus = useCallback(async () => {
+    if (!gameData) return;
+    try {
+      const response = await fetch(`/api/endless-tower?characterId=${gameData.character.id}`);
+      const data = await response.json();
+      if (data.success) {
+        setTowerState(prev => ({
+          ...prev,
+          floor: data.currentFloor,
+          maxFloor: data.maxFloor,
+          entriesToday: data.entriesToday,
+          maxEntries: data.maxEntries,
+          inProgress: data.inProgress,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load tower status:', err);
+    }
+  }, [gameData]);
+
+  const startTowerRun = async () => {
+    if (!gameData) return;
+    try {
+      const response = await fetch('/api/endless-tower', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterId: gameData.character.id, action: 'start' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTowerState(prev => ({
+          ...prev,
+          floor: data.floor,
+          inProgress: true,
+          monster: data.monster,
+          monsterCurrentHp: data.monster.hp,
+          playerCurrentHp: currentHp,
+          isRunning: true,
+          entriesToday: prev.maxEntries - data.entriesRemaining,
+        }));
+      } else {
+        showInfo({ title: 'Error', message: data.error || 'Failed to start tower', color: 'red' });
+      }
+    } catch (err) {
+      console.error('Failed to start tower:', err);
+    }
+  };
+
+  const addTowerFloatingDamage = useCallback((damage: number, type: 'player' | 'monster' | 'heal') => {
+    towerDamageIdRef.current += 1;
+    const x = type === 'monster' ? 30 + Math.random() * 40 : 30 + Math.random() * 40;
+    const y = type === 'monster' ? 20 + Math.random() * 20 : 55 + Math.random() * 20;
+
+    const newDamage = { id: towerDamageIdRef.current, damage, type, x, y };
+    setTowerState(prev => ({
+      ...prev,
+      floatingDamages: [...prev.floatingDamages, newDamage],
+    }));
+
+    setTimeout(() => {
+      setTowerState(prev => ({
+        ...prev,
+        floatingDamages: prev.floatingDamages.filter(d => d.id !== newDamage.id),
+      }));
+    }, 1000);
+  }, []);
+
+  const performTowerCombat = useCallback(async () => {
+    if (!gameData || !towerState.monster || !towerState.isRunning) return;
+
+    const { monster, monsterCurrentHp, playerCurrentHp } = towerState;
+    const { character, stats } = gameData;
+
+    // Calculate combat stats inline
+    const isBufferActive = character.bufferActiveUntil
+      ? new Date(character.bufferActiveUntil) > new Date()
+      : false;
+    const bufferBonus = isBufferActive ? character.helperBufferLevel * 0.1 : 0;
+    const combatStats = {
+      minDamage: Math.floor((stats.minDamage + (equipmentBonuses.damage_min || 0)) * (1 + bufferBonus / 100)),
+      maxDamage: Math.floor((stats.maxDamage + (equipmentBonuses.damage_max || 0)) * (1 + bufferBonus / 100)),
+      defense: Math.floor((stats.physicalDefense + (equipmentBonuses.defense || 0)) * (1 + bufferBonus / 100)),
+    };
+
+    // Player attacks
+    const playerDamage = Math.floor(Math.random() * (combatStats.maxDamage - combatStats.minDamage + 1)) + combatStats.minDamage;
+    const newMonsterHp = Math.max(0, monsterCurrentHp - playerDamage);
+    addTowerFloatingDamage(playerDamage, 'player');
+
+    // Monster defeated
+    if (newMonsterHp <= 0) {
+      // Complete floor
+      try {
+        const response = await fetch('/api/endless-tower', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ characterId: gameData.character.id, action: 'complete_floor' }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          // Heal 10% HP between floors
+          const healAmount = Math.floor(stats.maxHp * 0.1);
+          const newPlayerHp = Math.min(stats.maxHp, playerCurrentHp + healAmount);
+          handleHpChange(newPlayerHp);
+
+          setTowerState(prev => ({
+            ...prev,
+            floor: data.nextFloor,
+            monster: data.nextMonster,
+            monsterCurrentHp: data.nextMonster.hp,
+            playerCurrentHp: newPlayerHp,
+            maxFloor: data.newMaxFloor || prev.maxFloor,
+            lastRewards: data.rewards,
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to complete floor:', err);
+      }
+      return;
+    }
+
+    // Monster attacks back
+    const monsterDamage = Math.max(1, Math.floor(
+      Math.random() * (monster.maxDamage - monster.minDamage + 1) + monster.minDamage
+    ) - Math.floor(combatStats.defense / 4));
+    const newPlayerHp = Math.max(0, playerCurrentHp - monsterDamage);
+    addTowerFloatingDamage(monsterDamage, 'monster');
+
+    setTowerState(prev => ({
+      ...prev,
+      monsterCurrentHp: newMonsterHp,
+      playerCurrentHp: newPlayerHp,
+    }));
+    handleHpChange(newPlayerHp);
+
+    // Player defeated
+    if (newPlayerHp <= 0) {
+      if (towerCombatRef.current) {
+        clearInterval(towerCombatRef.current);
+        towerCombatRef.current = null;
+      }
+
+      try {
+        const response = await fetch('/api/endless-tower', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ characterId: gameData.character.id, action: 'defeat' }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          setTowerState(prev => ({
+            ...prev,
+            isRunning: false,
+            inProgress: false,
+            monster: null,
+            entriesToday: prev.maxEntries - data.entriesRemaining,
+          }));
+          showInfo({
+            title: 'Defeated!',
+            message: `You reached floor ${data.finalFloor}. Your max floor: ${data.maxFloor}`,
+            color: 'red',
+          });
+        }
+      } catch (err) {
+        console.error('Failed to record defeat:', err);
+      }
+    }
+  }, [gameData, towerState, equipmentBonuses, addTowerFloatingDamage, handleHpChange, showInfo]);
+
+  const exitTower = async () => {
+    if (!gameData) return;
+    if (towerCombatRef.current) {
+      clearInterval(towerCombatRef.current);
+      towerCombatRef.current = null;
+    }
+
+    try {
+      const response = await fetch('/api/endless-tower', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterId: gameData.character.id, action: 'exit' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTowerState(prev => ({
+          ...prev,
+          isRunning: false,
+          inProgress: false,
+          monster: null,
+        }));
+        showInfo({
+          title: 'Tower Exited',
+          message: data.message,
+          color: 'yellow',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to exit tower:', err);
+    }
+  };
+
+  // Tower combat loop
+  useEffect(() => {
+    if (towerState.isRunning && towerState.monster && showTowerPanel && gameData) {
+      const attackSpeed = Math.min(350, gameData.stats.attackSpeed + (equipmentBonuses.attack_speed || 0));
+      const interval = Math.max(150, 2000 - attackSpeed * 10);
+      towerCombatRef.current = setInterval(performTowerCombat, interval);
+    } else {
+      if (towerCombatRef.current) {
+        clearInterval(towerCombatRef.current);
+        towerCombatRef.current = null;
+      }
+    }
+
+    return () => {
+      if (towerCombatRef.current) {
+        clearInterval(towerCombatRef.current);
+      }
+    };
+  }, [towerState.isRunning, towerState.monster, showTowerPanel, gameData, equipmentBonuses.attack_speed, performTowerCombat]);
+
+  // Load tower status when panel opens
+  useEffect(() => {
+    if (showTowerPanel && gameData) {
+      loadTowerStatus();
+    }
+  }, [showTowerPanel, gameData, loadTowerStatus]);
+
+  // Resume tower run if in progress
+  useEffect(() => {
+    if (showTowerPanel && gameData && towerState.inProgress && !towerState.monster) {
+      // Fetch current monster
+      fetch('/api/endless-tower', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ characterId: gameData.character.id, action: 'get_monster' }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setTowerState(prev => ({
+              ...prev,
+              floor: data.floor,
+              monster: data.monster,
+              monsterCurrentHp: data.monster.hp,
+              playerCurrentHp: currentHp,
+              isRunning: true,
+            }));
+          }
+        })
+        .catch(err => console.error('Failed to resume tower:', err));
+    }
+  }, [showTowerPanel, gameData, towerState.inProgress, towerState.monster, currentHp]);
+
+  // Load quests when panel opens and refresh every 5 seconds
+  useEffect(() => {
+    if (showQuestsPanel && gameData) {
+      // Save progress first to update quest tracking in DB
+      const saveAndRefresh = async () => {
+        const killsToSend = pendingKillsRef.current;
+        const expToSend = pendingExpRef.current;
+
+        if (killsToSend > 0 || expToSend > 0) {
+          try {
+            await fetch('/api/game/progress', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                character_id: gameData.character.id,
+                experience: gameData.character.experience,
+                zen: gameData.character.zen,
+                level: gameData.character.level,
+                kills_gained: killsToSend,
+                exp_gained: expToSend,
+                update_heartbeat: false,
+              }),
+            });
+            pendingKillsRef.current = 0;
+            pendingExpRef.current = 0;
+          } catch (err) {
+            console.error('Failed to save quest progress:', err);
+          }
+        }
+        await loadQuests();
+      };
+
+      saveAndRefresh();
+      const interval = setInterval(saveAndRefresh, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [showQuestsPanel, gameData, loadQuests]);
 
   const handleAscensionUpgrade = async (skill: string) => {
     if (!gameData || gameData.character.ascensionPoints <= 0) return;
@@ -859,19 +1397,25 @@ export default function HomePage() {
   }
 
   const { character, stats } = gameData;
-  // Buffer helper bonus: +0.1% DMG per level
-  const bufferBonus = character.helperBufferLevel * 0.1;
+
+  // Buffer is active only when bufferActiveUntil is in the future
+  const isBufferActive = character.bufferActiveUntil
+    ? new Date(character.bufferActiveUntil) > new Date()
+    : false;
+
+  // Buffer bonus: +0.1% DMG & DEF per level (only when active)
+  const bufferBonus = isBufferActive ? character.helperBufferLevel * 0.1 : 0;
 
   const totalStats = {
     minDamage: Math.floor((stats.minDamage + (equipmentBonuses.damage_min || 0)) * (1 + bufferBonus / 100)),
     maxDamage: Math.floor((stats.maxDamage + (equipmentBonuses.damage_max || 0)) * (1 + bufferBonus / 100)),
-    defense: stats.physicalDefense + (equipmentBonuses.defense || 0),
+    defense: Math.floor((stats.physicalDefense + (equipmentBonuses.defense || 0)) * (1 + bufferBonus / 100)),
     attackSpeed: Math.min(350, stats.attackSpeed + (equipmentBonuses.attack_speed || 0)),
   };
 
-  // EXP calculation helper (formula: level² × 3.75)
+  // EXP calculation helper (formula: level² × 2.8125 - reduced 25%)
   const currentExp = BigInt(character.experience);
-  const expNeeded = BigInt(Math.floor(character.level * character.level * 3.75));
+  const expNeeded = BigInt(Math.floor(character.level * character.level * 2.8125));
   const expPercentage = Number((currentExp * 100n) / expNeeded);
   const expRemaining = Number(expNeeded - currentExp);
   const timeToLevel = expPerSecond > 0 ? Math.ceil(expRemaining / expPerSecond) : null;
@@ -891,12 +1435,60 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           {/* Top row - Logo and menu */}
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg lg:text-2xl font-bold text-yellow-400">MU Idle</h1>
+            {/* Mobile: Logo and name */}
+            <div className="flex items-center gap-2 lg:hidden">
+              <h1 className="text-lg font-bold text-yellow-400">MU Idle</h1>
               <span className="hidden sm:inline text-gray-400 text-sm">| {character.name}</span>
             </div>
-            {/* Desktop Navigation */}
-            <div className="hidden sm:flex items-center gap-2">
+            {/* Desktop: Ascension and Quests buttons */}
+            <div className="hidden lg:flex items-center gap-2">
+              <button
+                onClick={() => setShowAscensionPanel(true)}
+                className="px-3 py-1.5 bg-purple-600 rounded-lg hover:bg-purple-500 text-sm flex items-center gap-1.5 font-medium"
+              >
+                ⭐ Ascension
+                {character.ascensionPoints > 0 && (
+                  <span className="bg-yellow-500 text-black text-xs px-1.5 rounded-full font-bold">
+                    {character.ascensionPoints}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowQuestsPanel(true)}
+                className="px-3 py-1.5 bg-amber-600 rounded-lg hover:bg-amber-500 text-sm flex items-center gap-1.5 font-medium"
+              >
+                📋 Daily Quests
+                {quests.filter(q => q.completed && !q.claimed).length > 0 && (
+                  <span className="bg-green-500 text-white text-xs px-1.5 rounded-full font-bold">
+                    {quests.filter(q => q.completed && !q.claimed).length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowAchievementsPanel(true)}
+                className="px-3 py-1.5 bg-indigo-600 rounded-lg hover:bg-indigo-500 text-sm flex items-center gap-1.5 font-medium"
+              >
+                🏆 Achievements
+                {achievements.filter(a => a.unlocked && !a.claimed).length > 0 && (
+                  <span className="bg-yellow-500 text-black text-xs px-1.5 rounded-full font-bold">
+                    {achievements.filter(a => a.unlocked && !a.claimed).length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowTowerPanel(true)}
+                className="px-3 py-1.5 bg-rose-600 rounded-lg hover:bg-rose-500 text-sm flex items-center gap-1.5 font-medium"
+              >
+                🗼 Tower
+                {towerState.maxFloor > 0 && (
+                  <span className="bg-black/30 text-white text-xs px-1.5 rounded-full">
+                    F{towerState.maxFloor}
+                  </span>
+                )}
+              </button>
+            </div>
+            {/* Desktop Navigation - hidden on lg (uses global menu) */}
+            <div className="hidden sm:flex lg:hidden items-center gap-2">
               <button
                 onClick={() => setShowAscensionPanel(true)}
                 className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm flex items-center gap-1"
@@ -908,8 +1500,39 @@ export default function HomePage() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setShowQuestsPanel(true)}
+                className="px-3 py-1 bg-amber-700 rounded hover:bg-amber-600 text-sm flex items-center gap-1"
+              >
+                📋 Quests
+                {quests.filter(q => q.completed && !q.claimed).length > 0 && (
+                  <span className="bg-green-500 text-white text-xs px-1 rounded-full font-bold">
+                    {quests.filter(q => q.completed && !q.claimed).length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowAchievementsPanel(true)}
+                className="px-3 py-1 bg-indigo-700 rounded hover:bg-indigo-600 text-sm flex items-center gap-1"
+              >
+                🏆
+                {achievements.filter(a => a.unlocked && !a.claimed).length > 0 && (
+                  <span className="bg-yellow-500 text-black text-xs px-1 rounded-full font-bold">
+                    {achievements.filter(a => a.unlocked && !a.claimed).length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setShowTowerPanel(true)}
+                className="px-3 py-1 bg-rose-700 rounded hover:bg-rose-600 text-sm flex items-center gap-1"
+              >
+                🗼
+              </button>
               <Link href="/events" className="px-3 py-1 bg-orange-700 rounded hover:bg-orange-600 text-sm">
                 Events
+              </Link>
+              <Link href="/boss-zone" className="px-3 py-1 bg-red-700 rounded hover:bg-red-600 text-sm">
+                Boss Zone
               </Link>
               <Link href="/chaos-machine" className="px-3 py-1 bg-purple-700 rounded hover:bg-purple-600 text-sm">
                 Chaos Machine
@@ -1003,6 +1626,17 @@ export default function HomePage() {
                 </div>
               </Link>
               <Link
+                href="/boss-zone"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 p-3 bg-red-900/30 hover:bg-red-700/40 rounded-xl transition-colors border border-red-700/30"
+              >
+                <span className="text-2xl">👹</span>
+                <div>
+                  <div className="font-medium text-red-400">Boss Zone</div>
+                  <div className="text-[10px] text-gray-400">Daily Bosses</div>
+                </div>
+              </Link>
+              <Link
                 href="/chaos-machine"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-3 p-3 bg-purple-900/30 hover:bg-purple-700/40 rounded-xl transition-colors border border-purple-700/30"
@@ -1024,6 +1658,86 @@ export default function HomePage() {
                   <div className="text-[10px] text-gray-400">Storage</div>
                 </div>
               </Link>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowAscensionPanel(true);
+                }}
+                className="flex items-center gap-3 p-3 bg-purple-900/30 hover:bg-purple-700/40 rounded-xl transition-colors border border-purple-700/30"
+              >
+                <span className="text-2xl">⭐</span>
+                <div>
+                  <div className="font-medium text-purple-400 flex items-center gap-2">
+                    Ascension
+                    {character.ascensionPoints > 0 && (
+                      <span className="bg-yellow-500 text-black text-[10px] px-1.5 rounded-full font-bold">
+                        {character.ascensionPoints}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-400">Skill Tree</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowQuestsPanel(true);
+                }}
+                className="flex items-center gap-3 p-3 bg-amber-900/30 hover:bg-amber-700/40 rounded-xl transition-colors border border-amber-700/30"
+              >
+                <span className="text-2xl">📋</span>
+                <div>
+                  <div className="font-medium text-amber-400 flex items-center gap-2">
+                    Quests
+                    {quests.filter(q => q.completed && !q.claimed).length > 0 && (
+                      <span className="bg-green-500 text-white text-[10px] px-1.5 rounded-full font-bold">
+                        {quests.filter(q => q.completed && !q.claimed).length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-400">Daily Tasks</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowAchievementsPanel(true);
+                }}
+                className="flex items-center gap-3 p-3 bg-indigo-900/30 hover:bg-indigo-700/40 rounded-xl transition-colors border border-indigo-700/30"
+              >
+                <span className="text-2xl">🏆</span>
+                <div>
+                  <div className="font-medium text-indigo-400 flex items-center gap-2">
+                    Achievements
+                    {achievements.filter(a => a.unlocked && !a.claimed).length > 0 && (
+                      <span className="bg-yellow-500 text-black text-[10px] px-1.5 rounded-full font-bold">
+                        {achievements.filter(a => a.unlocked && !a.claimed).length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-400">Rewards</div>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowTowerPanel(true);
+                }}
+                className="flex items-center gap-3 p-3 bg-rose-900/30 hover:bg-rose-700/40 rounded-xl transition-colors border border-rose-700/30"
+              >
+                <span className="text-2xl">🗼</span>
+                <div>
+                  <div className="font-medium text-rose-400 flex items-center gap-2">
+                    Endless Tower
+                    {towerState.maxFloor > 0 && (
+                      <span className="bg-black/30 text-white text-[10px] px-1.5 rounded-full">
+                        F{towerState.maxFloor}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-gray-400">Challenge</div>
+                </div>
+              </button>
               <Link
                 href="/characters"
                 onClick={() => setMobileMenuOpen(false)}
@@ -1374,7 +2088,7 @@ export default function HomePage() {
               currentHp={currentHp}
               criticalRate={stats.criticalRate}
               attackSpeed={totalStats.attackSpeed}
-              lifeSteal={equipmentBonuses.life_steal}
+              lifeSteal={(equipmentBonuses.life_steal || 0) + character.ascLifeSteal * 0.1}
               reflectDamage={equipmentBonuses.reflect_damage}
               expBonus={equipmentBonuses.exp_bonus}
               zenBonus={character.zenLevel}
@@ -1384,8 +2098,8 @@ export default function HomePage() {
               poisonChance={stats.poisonChance}
               helperAttackerLevel={character.helperAttackerLevel}
               helperBufferLevel={character.helperBufferLevel}
-              helperAttackerDamage={5 + character.helperAttackerLevel * 2}
-              helperBufferBonus={character.helperBufferLevel * 0.1}
+              helperAttackerDamage={50 + character.helperAttackerLevel * 20}
+              helperBufferBonus={bufferBonus}
               onHpChange={handleHpChange}
               onExpGain={handleExpGain}
               onItemDrop={handleItemDrop}
@@ -1404,7 +2118,7 @@ export default function HomePage() {
                     <div className="space-y-1 text-xs">
                       <div className="font-bold text-yellow-400 mb-1">Helpers assist you in hunting:</div>
                       <div><span className="text-amber-400">Attacker:</span> Deals DMG 2x per second</div>
-                      <div><span className="text-emerald-400">Buffer:</span> Increases your DMG by 0.1% per level (max 10%)</div>
+                      <div><span className="text-emerald-400">Buffer:</span> +0.1% DMG & DEF per level (2min active, 10min cooldown)</div>
                     </div>
                   }
                 />
@@ -1420,7 +2134,7 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div className="text-xs text-gray-300 mb-2">
-                    DMG: <span className="text-amber-400 font-bold">{5 + character.helperAttackerLevel * 2}</span> (2x/sec)
+                    DMG: <span className="text-white font-bold">{50 + character.helperAttackerLevel * 20}</span> (2x/sec)
                   </div>
                   <button
                     onClick={() => handleUpgradeHelper('attacker')}
@@ -1435,28 +2149,59 @@ export default function HomePage() {
                   </button>
                 </div>
                 {/* Buffer Helper */}
-                <div className="bg-gray-900/50 rounded-lg p-3 border border-gray-700/50">
+                <div className={`bg-gray-900/50 rounded-lg p-3 border ${isBufferActive ? 'border-emerald-500 bg-emerald-900/20' : 'border-gray-700/50'}`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-2xl">✨</span>
                     <div>
                       <div className="text-emerald-400 font-bold">Buffer</div>
                       <div className="text-xs text-gray-400">Level {character.helperBufferLevel}/100</div>
                     </div>
+                    {isBufferActive && (
+                      <span className="ml-auto text-xs bg-emerald-600 text-white px-2 py-0.5 rounded animate-pulse">ACTIVE</span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-300 mb-2">
-                    Bonus: <span className="text-emerald-400 font-bold">+{(character.helperBufferLevel * 0.1).toFixed(1)}%</span> DMG
+                    Bonus: <span className="text-emerald-400 font-bold">+{(character.helperBufferLevel * 0.1).toFixed(1)}%</span> DMG & DEF
                   </div>
-                  <button
-                    onClick={() => handleUpgradeHelper('buffer')}
-                    disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
-                    className={`w-full px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
-                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleUpgradeHelper('buffer')}
+                      disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
+                      className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
+                          ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     }`}
                   >
-                    {character.helperBufferLevel >= 100 ? 'MAX LEVEL' : `Upgrade: ${formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}`}
+                    {character.helperBufferLevel >= 100 ? 'MAX' : formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}
                   </button>
+                    {(() => {
+                      const isOnCooldown = bufferCooldownRemaining > 0;
+                      const canActivate = character.helperBufferLevel > 0 && !isBufferActive && !isOnCooldown;
+                      const formatCooldown = (s: number) => {
+                        const m = Math.floor(s / 60);
+                        const sec = s % 60;
+                        return m > 0 ? `${m}:${sec.toString().padStart(2, '0')}` : `${sec}s`;
+                      };
+                      return (
+                        <button
+                          onClick={handleActivateBuffer}
+                          disabled={!canActivate}
+                          className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            canActivate
+                              ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-white'
+                              : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {isBufferActive
+                            ? `✓ ${formatCooldown(bufferActiveRemaining)}`
+                            : isOnCooldown
+                              ? formatCooldown(bufferCooldownRemaining)
+                              : 'Activate'}
+                        </button>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1467,28 +2212,60 @@ export default function HomePage() {
             <h2 className="text-lg font-semibold text-yellow-400 mb-3">Equipment</h2>
             <EquipmentPanel equipment={equipment} onUnequip={handleUnequipItem} />
             <div className="mt-3 pt-3 border-t border-gray-700 text-xs">
-              <div className="text-gray-400 mb-1 flex items-center gap-1">
-                Bonuses
-                <InfoTooltip
-                  color="green"
-                  content={
-                    <div className="space-y-1">
-                      <div className="font-bold text-green-400 mb-1">Equipment Bonuses:</div>
-                      <div><span className="text-red-400">DMG:</span> From weapons</div>
-                      <div><span className="text-blue-400">DEF:</span> From armor pieces</div>
-                      <div><span className="text-cyan-400">Crit:</span> From item options</div>
-                      <div><span className="text-pink-400">LS:</span> Life Steal from options</div>
-                      <div><span className="text-purple-400">EXP:</span> EXP bonus from options</div>
-                    </div>
-                  }
-                />
+              <div className="text-gray-400 mb-2 font-semibold">All Bonuses</div>
+
+              {/* Equipment Bonuses */}
+              <div className="mb-2">
+                <div className="text-gray-500 text-[10px] mb-1">Equipment:</div>
+                <div className="grid grid-cols-2 gap-x-2">
+                  {equipmentBonuses.damage_min > 0 && <div className="text-red-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} DMG</div>}
+                  {equipmentBonuses.defense > 0 && <div className="text-blue-400">+{equipmentBonuses.defense} DEF</div>}
+                  {equipmentBonuses.attack_speed > 0 && <div className="text-yellow-400">+{equipmentBonuses.attack_speed} Speed</div>}
+                  {equipmentBonuses.critical_rate > 0 && <div className="text-cyan-400">+{equipmentBonuses.critical_rate}% Crit</div>}
+                  {equipmentBonuses.critical_damage > 0 && <div className="text-orange-400">+{equipmentBonuses.critical_damage}% Crit DMG</div>}
+                  {equipmentBonuses.life_steal > 0 && <div className="text-pink-400">+{equipmentBonuses.life_steal}% Life Steal</div>}
+                  {equipmentBonuses.exp_bonus > 0 && <div className="text-purple-400">+{equipmentBonuses.exp_bonus}% EXP</div>}
+                  {equipmentBonuses.zen_bonus > 0 && <div className="text-amber-400">+{equipmentBonuses.zen_bonus}% Zen</div>}
+                  {equipmentBonuses.max_hp > 0 && <div className="text-green-400">+{equipmentBonuses.max_hp}% HP</div>}
+                  {equipmentBonuses.hp_recovery > 0 && <div className="text-emerald-400">+{equipmentBonuses.hp_recovery}% HP Regen</div>}
+                  {equipmentBonuses.damage_percent > 0 && <div className="text-red-300">+{equipmentBonuses.damage_percent}% DMG</div>}
+                  {equipmentBonuses.defense_percent > 0 && <div className="text-blue-300">+{equipmentBonuses.defense_percent}% DEF</div>}
+                  {equipmentBonuses.attack_speed_percent > 0 && <div className="text-yellow-300">+{equipmentBonuses.attack_speed_percent}% Speed</div>}
+                  {equipmentBonuses.excellent_damage > 0 && <div className="text-indigo-400">+{equipmentBonuses.excellent_damage}% Exc DMG</div>}
+                  {equipmentBonuses.damage_decrease > 0 && <div className="text-teal-400">-{equipmentBonuses.damage_decrease}% DMG Taken</div>}
+                  {equipmentBonuses.reflect_damage > 0 && <div className="text-rose-400">+{equipmentBonuses.reflect_damage}% Reflect</div>}
+                </div>
               </div>
-              {equipmentBonuses.damage_min > 0 && <div className="text-red-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} DMG</div>}
-              {equipmentBonuses.defense > 0 && <div className="text-blue-400">+{equipmentBonuses.defense} DEF</div>}
-              {equipmentBonuses.critical_rate > 0 && <div className="text-cyan-400">+{equipmentBonuses.critical_rate}% Crit</div>}
-              {equipmentBonuses.life_steal > 0 && <div className="text-pink-400">+{equipmentBonuses.life_steal}% LS</div>}
-              {equipmentBonuses.exp_bonus > 0 && <div className="text-purple-400">+{equipmentBonuses.exp_bonus}% EXP</div>}
-              {equipmentBonuses.max_hp > 0 && <div className="text-red-400">+{equipmentBonuses.max_hp}% HP</div>}
+
+              {/* Ascension Bonuses */}
+              {(character.ascDamage > 0 || character.ascCritical > 0 || character.ascHealth > 0 || character.ascLifeSteal > 0 || character.ascZen > 0 || character.ascExp > 0 || character.ascPoison > 0 || character.ascExcellent > 0) && (
+                <div className="mb-2">
+                  <div className="text-gray-500 text-[10px] mb-1">Ascension:</div>
+                  <div className="grid grid-cols-2 gap-x-2">
+                    {character.ascDamage > 0 && <div className="text-red-400">+{(character.ascDamage * 0.2).toFixed(1)}% DMG</div>}
+                    {character.ascCritical > 0 && <div className="text-yellow-400">+{(character.ascCritical * 0.2).toFixed(1)}% Crit</div>}
+                    {character.ascHealth > 0 && <div className="text-green-400">+{(character.ascHealth * 0.2).toFixed(1)}% HP</div>}
+                    {character.ascLifeSteal > 0 && <div className="text-pink-400">+{(character.ascLifeSteal * 0.1).toFixed(1)}% LS</div>}
+                    {character.ascZen > 0 && <div className="text-amber-400">+{(character.ascZen * 0.5).toFixed(1)}% Zen</div>}
+                    {character.ascExp > 0 && <div className="text-cyan-400">+{(character.ascExp * 0.5).toFixed(1)}% EXP</div>}
+                    {character.ascPoison > 0 && <div className="text-lime-400">+{(character.ascPoison * 0.2).toFixed(1)}% Poison</div>}
+                    {character.ascExcellent > 0 && <div className="text-indigo-400">+{(character.ascExcellent * 0.25).toFixed(2)}% Exc</div>}
+                  </div>
+                </div>
+              )}
+
+              {/* Reset Bonuses */}
+              {character.resetCount > 0 && (
+                <div>
+                  <div className="text-gray-500 text-[10px] mb-1">Reset ({character.resetCount}x):</div>
+                  <div className="grid grid-cols-2 gap-x-2">
+                    <div className="text-red-400">+{character.resetCount * 5} DMG</div>
+                    <div className="text-blue-400">+{character.resetCount * 3} DEF</div>
+                    <div className="text-green-400">+{character.resetCount * 50} HP</div>
+                    <div className="text-yellow-400">+{character.resetCount * 2} Speed</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1566,13 +2343,13 @@ export default function HomePage() {
                 {/* Skill Tree Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { key: 'damage', label: 'Damage Mastery', value: character.ascDamage, bonus: '+2%', desc: 'Increases all damage dealt', color: 'from-red-600 to-red-800', borderColor: 'border-red-500', icon: '⚔️', total: `${(character.ascDamage * 2)}% DMG` },
-                    { key: 'critical', label: 'Critical Eye', value: character.ascCritical, bonus: '+1%', desc: 'Increases critical hit chance', color: 'from-yellow-600 to-orange-700', borderColor: 'border-yellow-500', icon: '💥', total: `${character.ascCritical}% Crit` },
-                    { key: 'health', label: 'Vitality', value: character.ascHealth, bonus: '+5%', desc: 'Increases maximum HP', color: 'from-green-600 to-emerald-800', borderColor: 'border-green-500', icon: '❤️', total: `${(character.ascHealth * 5)}% HP` },
-                    { key: 'lifeSteal', label: 'Vampirism', value: character.ascLifeSteal, bonus: '+0.5%', desc: 'Steal HP on each hit', color: 'from-pink-600 to-rose-800', borderColor: 'border-pink-500', icon: '🩸', total: `${(character.ascLifeSteal * 0.5).toFixed(1)}% LS` },
-                    { key: 'zen', label: 'Wealth', value: character.ascZen, bonus: '+3%', desc: 'Increases zen drops', color: 'from-amber-500 to-yellow-700', borderColor: 'border-amber-400', icon: '💰', total: `${(character.ascZen * 3)}% Zen` },
-                    { key: 'exp', label: 'Wisdom', value: character.ascExp, bonus: '+2%', desc: 'Increases experience gain', color: 'from-cyan-500 to-blue-700', borderColor: 'border-cyan-400', icon: '📈', total: `${(character.ascExp * 2)}% EXP` },
-                    { key: 'poison', label: 'Venom Strike', value: character.ascPoison, bonus: '+0.5%', desc: 'Chance to poison (10% current HP)', color: 'from-lime-600 to-green-900', borderColor: 'border-lime-500', icon: '🧪', total: `${(character.ascPoison * 0.5).toFixed(1)}% chance` },
+                    { key: 'damage', label: 'Damage Mastery', value: character.ascDamage, bonus: '+0.2%', desc: 'Increases all damage dealt', color: 'from-red-600 to-red-800', borderColor: 'border-red-500', icon: '⚔️', total: `${(character.ascDamage * 0.2).toFixed(1)}% DMG` },
+                    { key: 'critical', label: 'Critical Eye', value: character.ascCritical, bonus: '+0.2%', desc: 'Increases critical hit chance', color: 'from-yellow-600 to-orange-700', borderColor: 'border-yellow-500', icon: '💥', total: `${(character.ascCritical * 0.2).toFixed(1)}% Crit` },
+                    { key: 'health', label: 'Vitality', value: character.ascHealth, bonus: '+0.2%', desc: 'Increases maximum HP', color: 'from-green-600 to-emerald-800', borderColor: 'border-green-500', icon: '❤️', total: `${(character.ascHealth * 0.2).toFixed(1)}% HP` },
+                    { key: 'lifeSteal', label: 'Vampirism', value: character.ascLifeSteal, bonus: '+0.1%', desc: 'Steal HP on each hit', color: 'from-pink-600 to-rose-800', borderColor: 'border-pink-500', icon: '🩸', total: `${(character.ascLifeSteal * 0.1).toFixed(1)}% LS` },
+                    { key: 'zen', label: 'Wealth', value: character.ascZen, bonus: '+0.5%', desc: 'Increases zen drops', color: 'from-amber-500 to-yellow-700', borderColor: 'border-amber-400', icon: '💰', total: `${(character.ascZen * 0.5).toFixed(1)}% Zen` },
+                    { key: 'exp', label: 'Wisdom', value: character.ascExp, bonus: '+0.5%', desc: 'Increases experience gain', color: 'from-cyan-500 to-blue-700', borderColor: 'border-cyan-400', icon: '📈', total: `${(character.ascExp * 0.5).toFixed(1)}% EXP` },
+                    { key: 'poison', label: 'Venom Strike', value: character.ascPoison, bonus: '+0.2%', desc: 'Chance to poison (10% current HP)', color: 'from-lime-600 to-green-900', borderColor: 'border-lime-500', icon: '🧪', total: `${(character.ascPoison * 0.2).toFixed(1)}% chance` },
                     { key: 'excellent', label: 'Excellence', value: character.ascExcellent, bonus: '+0.25%', desc: 'Chance for excellent damage (2x)', color: 'from-indigo-500 to-violet-800', borderColor: 'border-indigo-400', icon: '✨', total: `${(character.ascExcellent * 0.25).toFixed(2)}% chance` },
                   ].map(({ key, label, value, bonus, desc, color, borderColor, icon, total }) => (
                     <div
@@ -1633,6 +2410,539 @@ export default function HomePage() {
           </div>
         )}
 
+        {/* Daily Quests Modal */}
+        {showQuestsPanel && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowQuestsPanel(false)}>
+            <div
+              className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 rounded-2xl border-2 border-amber-600/50 shadow-2xl shadow-amber-900/50 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-amber-900/90 via-amber-800/90 to-amber-900/90 backdrop-blur p-4 border-b border-amber-500/30 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">📋</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-amber-300">Daily Quests</h2>
+                    <p className="text-sm text-amber-400/70">Complete quests for valuable rewards</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="bg-amber-600/30 rounded-full px-4 py-2 border border-amber-500/50">
+                    <span className="text-amber-300 text-sm">Completed:</span>
+                    <span className="ml-2 text-2xl font-bold text-yellow-400">
+                      {quests.filter(q => q.completed).length}/{quests.length}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowQuestsPanel(false)}
+                    className="w-10 h-10 rounded-full bg-gray-700/50 hover:bg-red-600/50 transition-colors flex items-center justify-center text-xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Quest List */}
+              <div className="p-6">
+                {/* Info Banner */}
+                <div className="mb-6 p-3 bg-amber-900/30 rounded-lg border border-amber-500/30 text-center">
+                  <span className="text-amber-300 text-sm">
+                    Quests reset daily at <span className="text-yellow-400 font-bold">midnight UTC</span>
+                  </span>
+                </div>
+
+                {/* Quests Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {quests.map((quest) => (
+                    <div
+                      key={quest.id}
+                      className={`relative rounded-xl border-2 p-4 transition-all ${
+                        quest.claimed
+                          ? 'bg-gray-800/50 border-gray-600/50 opacity-60'
+                          : quest.completed
+                          ? 'bg-gradient-to-r from-green-900/50 to-emerald-900/50 border-green-500/50 shadow-lg shadow-green-900/30'
+                          : 'bg-gray-800/80 border-gray-600/50 hover:border-amber-500/30'
+                      }`}
+                    >
+                      {/* Quest Icon and Name */}
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-3xl">{quest.icon}</span>
+                        <div className="flex-1">
+                          <h3 className={`font-bold ${quest.completed ? 'text-green-300' : 'text-white'}`}>
+                            {quest.name}
+                          </h3>
+                          <p className="text-sm text-gray-400">{quest.description}</p>
+                        </div>
+                        {quest.claimed && (
+                          <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">Claimed</span>
+                        )}
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="mb-3">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className={quest.completed ? 'text-green-400' : 'text-gray-400'}>Progress</span>
+                          <span className={quest.completed ? 'text-green-400 font-bold' : 'text-gray-300'}>
+                            {quest.type === 'exp'
+                              ? `${formatNumber(quest.progress)}/${formatNumber(quest.target)}`
+                              : `${quest.progress}/${quest.target}`
+                            }
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 ${
+                              quest.completed ? 'bg-gradient-to-r from-green-500 to-emerald-400' : 'bg-gradient-to-r from-amber-600 to-yellow-500'
+                            }`}
+                            style={{ width: `${Math.min(100, (quest.progress / quest.target) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Rewards */}
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {quest.rewards.zen && (
+                          <span className="bg-amber-900/50 text-amber-300 text-xs px-2 py-1 rounded-full border border-amber-600/30">
+                            💰 {formatNumber(quest.rewards.zen)} Zen
+                          </span>
+                        )}
+                        {quest.rewards.jewelOfBless && (
+                          <span className="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded-full border border-blue-600/30">
+                            💎 {quest.rewards.jewelOfBless} Bless
+                          </span>
+                        )}
+                        {quest.rewards.jewelOfSoul && (
+                          <span className="bg-purple-900/50 text-purple-300 text-xs px-2 py-1 rounded-full border border-purple-600/30">
+                            💜 {quest.rewards.jewelOfSoul} Soul
+                          </span>
+                        )}
+                        {quest.rewards.jewelOfLife && (
+                          <span className="bg-green-900/50 text-green-300 text-xs px-2 py-1 rounded-full border border-green-600/30">
+                            💚 {quest.rewards.jewelOfLife} Life
+                          </span>
+                        )}
+                        {quest.rewards.jewelOfChaos && (
+                          <span className="bg-red-900/50 text-red-300 text-xs px-2 py-1 rounded-full border border-red-600/30">
+                            ❤️ {quest.rewards.jewelOfChaos} Chaos
+                          </span>
+                        )}
+                        {quest.rewards.bloodCastleTicket && (
+                          <span className="bg-rose-900/50 text-rose-300 text-xs px-2 py-1 rounded-full border border-rose-600/30">
+                            🏰 {quest.rewards.bloodCastleTicket} BC Ticket
+                          </span>
+                        )}
+                        {quest.rewards.devilSquareTicket && (
+                          <span className="bg-violet-900/50 text-violet-300 text-xs px-2 py-1 rounded-full border border-violet-600/30">
+                            👹 {quest.rewards.devilSquareTicket} DS Ticket
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Claim Button */}
+                      {!quest.claimed && (
+                        <button
+                          onClick={() => handleClaimQuest(quest.id)}
+                          disabled={!quest.completed}
+                          className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${
+                            quest.completed
+                              ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white shadow-lg shadow-green-900/50'
+                              : 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30'
+                          }`}
+                        >
+                          {quest.completed ? '🎁 Claim Reward' : 'In Progress...'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Empty State */}
+                {quests.length === 0 && (
+                  <div className="text-center text-gray-500 py-8">
+                    <span className="text-4xl block mb-2">📋</span>
+                    <p>Loading quests...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Achievements Modal */}
+        {showAchievementsPanel && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setShowAchievementsPanel(false)}>
+            <div
+              className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 rounded-2xl border-2 border-indigo-600/50 shadow-2xl shadow-indigo-900/50 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-indigo-900/90 via-indigo-800/90 to-indigo-900/90 backdrop-blur p-4 border-b border-indigo-500/30 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">🏆</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-indigo-300">Achievements</h2>
+                    <p className="text-sm text-indigo-400/70">Complete challenges for permanent rewards</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="bg-indigo-600/30 rounded-full px-4 py-2 border border-indigo-500/50">
+                    <span className="text-indigo-300 text-sm">Unlocked:</span>
+                    <span className="ml-2 text-2xl font-bold text-yellow-400">
+                      {achievements.filter(a => a.unlocked).length}/{achievements.length}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowAchievementsPanel(false)}
+                    className="w-10 h-10 rounded-full bg-gray-700/50 hover:bg-red-600/50 transition-colors flex items-center justify-center text-xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Achievement List */}
+              <div className="p-6">
+                {/* Category Tabs - simplified */}
+                <div className="mb-6 text-center">
+                  <span className="text-gray-400 text-sm">
+                    Achievements are permanent - complete them once and claim your rewards!
+                  </span>
+                </div>
+
+                {/* Achievements Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {achievements.map((achievement) => {
+                    const rarityColors: Record<string, string> = {
+                      common: 'from-gray-600 to-gray-800 border-gray-500',
+                      uncommon: 'from-green-700 to-green-900 border-green-500',
+                      rare: 'from-blue-700 to-blue-900 border-blue-500',
+                      epic: 'from-purple-700 to-purple-900 border-purple-500',
+                      legendary: 'from-yellow-600 to-orange-700 border-yellow-500',
+                    };
+                    const rarityLabels: Record<string, string> = {
+                      common: 'Common',
+                      uncommon: 'Uncommon',
+                      rare: 'Rare',
+                      epic: 'Epic',
+                      legendary: 'Legendary',
+                    };
+                    return (
+                      <div
+                        key={achievement.id}
+                        className={`relative rounded-xl border-2 p-4 transition-all ${
+                          achievement.claimed
+                            ? 'bg-gray-800/50 border-gray-600/50 opacity-60'
+                            : achievement.unlocked
+                            ? `bg-gradient-to-r ${rarityColors[achievement.rarity]} shadow-lg`
+                            : 'bg-gray-800/80 border-gray-600/50'
+                        }`}
+                      >
+                        {/* Rarity Badge */}
+                        <div className={`absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          achievement.rarity === 'legendary' ? 'bg-yellow-500 text-black' :
+                          achievement.rarity === 'epic' ? 'bg-purple-500 text-white' :
+                          achievement.rarity === 'rare' ? 'bg-blue-500 text-white' :
+                          achievement.rarity === 'uncommon' ? 'bg-green-500 text-white' :
+                          'bg-gray-500 text-white'
+                        }`}>
+                          {rarityLabels[achievement.rarity]}
+                        </div>
+
+                        {/* Achievement Icon and Name */}
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className={`text-3xl ${achievement.unlocked ? '' : 'grayscale opacity-50'}`}>
+                            {achievement.icon}
+                          </span>
+                          <div className="flex-1">
+                            <h3 className={`font-bold ${achievement.unlocked ? 'text-white' : 'text-gray-400'}`}>
+                              {achievement.name}
+                            </h3>
+                            <p className="text-sm text-gray-400">{achievement.description}</p>
+                          </div>
+                          {achievement.claimed && (
+                            <span className="bg-gray-600 text-gray-300 text-xs px-2 py-1 rounded-full">Claimed</span>
+                          )}
+                          {achievement.unlocked && !achievement.claimed && (
+                            <span className="bg-green-600 text-white text-xs px-2 py-1 rounded-full animate-pulse">Ready!</span>
+                          )}
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mb-3">
+                          <div className="flex justify-between text-sm mb-1">
+                            <span className={achievement.unlocked ? 'text-green-400' : 'text-gray-400'}>Progress</span>
+                            <span className={achievement.unlocked ? 'text-green-400 font-bold' : 'text-gray-300'}>
+                              {formatNumber(achievement.currentValue)}/{formatNumber(achievement.requirement.value)}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-500 ${
+                                achievement.unlocked
+                                  ? 'bg-gradient-to-r from-green-500 to-emerald-400'
+                                  : 'bg-gradient-to-r from-indigo-600 to-purple-500'
+                              }`}
+                              style={{ width: `${Math.min(100, (achievement.currentValue / achievement.requirement.value) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Rewards */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {achievement.rewards.zen && (
+                            <span className="bg-amber-900/50 text-amber-300 text-xs px-2 py-1 rounded-full border border-amber-600/30">
+                              💰 {formatNumber(achievement.rewards.zen)} Zen
+                            </span>
+                          )}
+                          {achievement.rewards.jewelOfBless && (
+                            <span className="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded-full border border-blue-600/30">
+                              💎 {achievement.rewards.jewelOfBless} Bless
+                            </span>
+                          )}
+                          {achievement.rewards.jewelOfSoul && (
+                            <span className="bg-purple-900/50 text-purple-300 text-xs px-2 py-1 rounded-full border border-purple-600/30">
+                              💜 {achievement.rewards.jewelOfSoul} Soul
+                            </span>
+                          )}
+                          {achievement.rewards.jewelOfLife && (
+                            <span className="bg-green-900/50 text-green-300 text-xs px-2 py-1 rounded-full border border-green-600/30">
+                              💚 {achievement.rewards.jewelOfLife} Life
+                            </span>
+                          )}
+                          {achievement.rewards.jewelOfChaos && (
+                            <span className="bg-red-900/50 text-red-300 text-xs px-2 py-1 rounded-full border border-red-600/30">
+                              ❤️ {achievement.rewards.jewelOfChaos} Chaos
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Claim Button */}
+                        {!achievement.claimed && (
+                          <button
+                            onClick={() => handleClaimAchievement(achievement.id)}
+                            disabled={!achievement.unlocked}
+                            className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${
+                              achievement.unlocked
+                                ? 'bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-white shadow-lg shadow-yellow-900/50'
+                                : 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30'
+                            }`}
+                          >
+                            {achievement.unlocked ? '🎁 Claim Reward' : 'Locked'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Empty State */}
+                {achievements.length === 0 && (
+                  <div className="text-center text-gray-500 py-8">
+                    <span className="text-4xl block mb-2">🏆</span>
+                    <p>Loading achievements...</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Endless Tower Modal */}
+        {showTowerPanel && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => !towerState.isRunning && setShowTowerPanel(false)}>
+            <div
+              className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 rounded-2xl border-2 border-rose-600/50 shadow-2xl shadow-rose-900/50 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-rose-900/90 via-rose-800/90 to-rose-900/90 backdrop-blur p-4 border-b border-rose-500/30 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">🗼</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-rose-300">Endless Tower</h2>
+                    <p className="text-sm text-rose-400/70">Climb as high as you can!</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="bg-rose-600/30 rounded-full px-4 py-2 border border-rose-500/50">
+                    <span className="text-rose-300 text-sm">Max Floor:</span>
+                    <span className="ml-2 text-2xl font-bold text-yellow-400">
+                      {towerState.maxFloor}
+                    </span>
+                  </div>
+                  {!towerState.isRunning && (
+                    <button
+                      onClick={() => setShowTowerPanel(false)}
+                      className="w-10 h-10 rounded-full bg-gray-700/50 hover:bg-red-600/50 transition-colors flex items-center justify-center text-xl"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Tower Content */}
+              <div className="p-6">
+                {/* Entry Info */}
+                <div className="mb-6 p-3 bg-rose-900/30 rounded-lg border border-rose-500/30 text-center">
+                  <span className="text-rose-300 text-sm">
+                    Daily Entries: <span className="text-yellow-400 font-bold">{towerState.entriesToday}/{towerState.maxEntries}</span>
+                    {towerState.entriesToday >= towerState.maxEntries && (
+                      <span className="ml-2 text-red-400">(Come back tomorrow!)</span>
+                    )}
+                  </span>
+                </div>
+
+                {!towerState.isRunning ? (
+                  /* Start Screen */
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">🗼</div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Ready to Climb?</h3>
+                    <p className="text-gray-400 mb-6">
+                      Monsters get +5% stronger each floor.<br />
+                      How high can you go?
+                    </p>
+                    {towerState.inProgress ? (
+                      <button
+                        onClick={() => {
+                          fetch('/api/endless-tower', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ characterId: gameData?.character.id, action: 'get_monster' }),
+                          })
+                            .then(res => res.json())
+                            .then(data => {
+                              if (data.success) {
+                                setTowerState(prev => ({
+                                  ...prev,
+                                  floor: data.floor,
+                                  monster: data.monster,
+                                  monsterCurrentHp: data.monster.hp,
+                                  playerCurrentHp: currentHp,
+                                  isRunning: true,
+                                }));
+                              }
+                            });
+                        }}
+                        className="px-8 py-3 bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 rounded-xl font-bold text-lg shadow-lg shadow-yellow-900/50"
+                      >
+                        Resume Run (Floor {towerState.floor})
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startTowerRun}
+                        disabled={towerState.entriesToday >= towerState.maxEntries}
+                        className={`px-8 py-3 rounded-xl font-bold text-lg ${
+                          towerState.entriesToday >= towerState.maxEntries
+                            ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 shadow-lg shadow-rose-900/50'
+                        }`}
+                      >
+                        {towerState.entriesToday >= towerState.maxEntries ? 'No Entries Left' : 'Enter Tower'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  /* Combat Screen */
+                  <div className="space-y-6">
+                    {/* Floor Indicator */}
+                    <div className="text-center">
+                      <span className="bg-rose-600 px-6 py-2 rounded-full text-lg font-bold">
+                        Floor {towerState.floor}
+                      </span>
+                      {towerState.lastRewards && (
+                        <div className="mt-2 text-sm text-green-400">
+                          +{formatNumber(towerState.lastRewards.exp)} EXP, +{formatNumber(towerState.lastRewards.zen)} Zen
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Combat Area */}
+                    <div className="bg-gray-900/80 rounded-xl p-6 relative min-h-[300px] overflow-hidden">
+                      {/* Floating Damages */}
+                      {towerState.floatingDamages.map((fd) => (
+                        <div
+                          key={fd.id}
+                          className={`absolute text-xl font-bold pointer-events-none animate-float-up z-30 ${
+                            fd.type === 'player' ? 'text-yellow-400' :
+                            fd.type === 'heal' ? 'text-green-400' :
+                            'text-red-500'
+                          }`}
+                          style={{
+                            left: `${fd.x}%`,
+                            top: `${fd.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                        >
+                          {fd.type === 'monster' ? `-${fd.damage}` : fd.type === 'heal' ? `+${fd.damage}` : fd.damage}
+                        </div>
+                      ))}
+
+                      {/* Monster */}
+                      {towerState.monster && (
+                        <div className="text-center mb-8">
+                          <div className="text-6xl mb-2">{towerState.monster.emoji}</div>
+                          <div className="text-lg font-bold text-white">{towerState.monster.name}</div>
+                          <div className="text-sm text-gray-400 mb-2">
+                            DMG: {towerState.monster.minDamage}-{towerState.monster.maxDamage}
+                          </div>
+                          {/* Monster HP Bar */}
+                          <div className="max-w-xs mx-auto">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="text-gray-400">HP</span>
+                              <span className="text-red-400">
+                                {towerState.monsterCurrentHp.toLocaleString()} / {towerState.monster.hp.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-200"
+                                style={{ width: `${(towerState.monsterCurrentHp / towerState.monster.hp) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* VS Divider */}
+                      <div className="text-center text-2xl font-bold text-gray-600 my-4">⚔️</div>
+
+                      {/* Player HP Bar */}
+                      <div className="max-w-xs mx-auto">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-gray-400">Your HP</span>
+                          <span className="text-green-400">
+                            {Math.max(0, towerState.playerCurrentHp).toLocaleString()} / {stats.maxHp.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-green-600 to-green-400 transition-all duration-200"
+                            style={{ width: `${Math.max(0, (towerState.playerCurrentHp / stats.maxHp) * 100)}%` }}
+                          />
+                        </div>
+                        <div className="text-center text-xs text-gray-500 mt-1">
+                          DMG: {totalStats.minDamage}-{totalStats.maxDamage} | DEF: {totalStats.defense}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Exit Button */}
+                    <div className="text-center">
+                      <button
+                        onClick={exitTower}
+                        className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium"
+                      >
+                        🚪 Exit Tower (Keep Progress)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Mobile Layout - Tabs */}
         <div className="lg:hidden">
           {/* Hunt Tab - Always rendered, hidden with CSS to preserve state */}
@@ -1648,7 +2958,7 @@ export default function HomePage() {
                 currentHp={currentHp}
                 criticalRate={stats.criticalRate}
                 attackSpeed={totalStats.attackSpeed}
-                lifeSteal={equipmentBonuses.life_steal}
+                lifeSteal={(equipmentBonuses.life_steal || 0) + character.ascLifeSteal * 0.1}
                 reflectDamage={equipmentBonuses.reflect_damage}
                 expBonus={equipmentBonuses.exp_bonus}
                 zenBonus={character.zenLevel}
@@ -1658,8 +2968,8 @@ export default function HomePage() {
                 poisonChance={stats.poisonChance}
                 helperAttackerLevel={character.helperAttackerLevel}
                 helperBufferLevel={character.helperBufferLevel}
-                helperAttackerDamage={5 + character.helperAttackerLevel * 2}
-                helperBufferBonus={character.helperBufferLevel * 0.1}
+                helperAttackerDamage={50 + character.helperAttackerLevel * 20}
+                helperBufferBonus={bufferBonus}
                 onHpChange={handleHpChange}
                 onExpGain={handleExpGain}
                 onItemDrop={handleItemDrop}
@@ -1758,7 +3068,7 @@ export default function HomePage() {
                         <span className="text-amber-400 font-bold">Attacker</span>
                         <span className="text-gray-400 ml-2">Lv.{character.helperAttackerLevel}</span>
                         <div className="text-[10px] text-gray-500">
-                          DMG: {5 + character.helperAttackerLevel * 2} (2x/sec)
+                          DMG: {50 + character.helperAttackerLevel * 20} (2x/sec)
                         </div>
                       </div>
                     </div>
@@ -1775,28 +3085,57 @@ export default function HomePage() {
                     </button>
                   </div>
                   {/* Buffer Helper */}
-                  <div className="flex justify-between items-center text-xs bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">✨</span>
-                      <div>
-                        <span className="text-emerald-400 font-bold">Buffer</span>
-                        <span className="text-gray-400 ml-2">Lv.{character.helperBufferLevel}/100</span>
-                        <div className="text-[10px] text-gray-500">
-                          +{(character.helperBufferLevel * 0.1).toFixed(1)}% DMG
+                  <div className={`text-xs rounded-lg px-3 py-2 border ${isBufferActive ? 'bg-emerald-900/30 border-emerald-500' : 'bg-gray-800/60 border-gray-700/50'}`}>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">✨</span>
+                        <div>
+                          <span className="text-emerald-400 font-bold">Buffer</span>
+                          <span className="text-gray-400 ml-2">Lv.{character.helperBufferLevel}/100</span>
+                          {isBufferActive && <span className="ml-2 text-emerald-400 text-[10px] animate-pulse">ACTIVE</span>}
+                          <div className="text-[10px] text-gray-500">
+                            +{(character.helperBufferLevel * 0.1).toFixed(1)}% DMG & DEF
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleUpgradeHelper('buffer')}
-                      disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                        character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
-                          ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white'
-                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                      }`}
-                    >
-                      {character.helperBufferLevel >= 100 ? 'MAX' : formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => handleUpgradeHelper('buffer')}
+                        disabled={character.helperBufferLevel >= 100 || BigInt(character.zen) < calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')}
+                        className={`flex-1 px-2 py-1 rounded text-[10px] font-bold ${
+                          character.helperBufferLevel < 100 && BigInt(character.zen) >= calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer')
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-700 text-gray-500'
+                        }`}
+                      >
+                        {character.helperBufferLevel >= 100 ? 'MAX' : formatNumber(calculateHelperUpgradeCost(character.helperBufferLevel, 'buffer'))}
+                      </button>
+                      {(() => {
+                        const isOnCooldown = bufferCooldownRemaining > 0;
+                        const canActivate = character.helperBufferLevel > 0 && !isBufferActive && !isOnCooldown;
+                        const formatCooldown = (s: number) => {
+                          const m = Math.floor(s / 60);
+                          const sec = s % 60;
+                          return m > 0 ? `${m}:${sec.toString().padStart(2, '0')}` : `${sec}s`;
+                        };
+                        return (
+                          <button
+                            onClick={handleActivateBuffer}
+                            disabled={!canActivate}
+                            className={`flex-1 px-2 py-1 rounded text-[10px] font-bold ${
+                              canActivate ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-500'
+                            }`}
+                          >
+                            {isBufferActive
+                              ? `✓ ${formatCooldown(bufferActiveRemaining)}`
+                              : isOnCooldown
+                                ? formatCooldown(bufferCooldownRemaining)
+                                : 'Activate'}
+                          </button>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1962,13 +3301,13 @@ export default function HomePage() {
                       content={
                         <div className="space-y-1">
                           <div className="font-bold text-purple-400 mb-1">Ascension Bonuses:</div>
-                          <div><span className="text-red-400">Damage:</span> +2% DMG per point</div>
-                          <div><span className="text-yellow-400">Critical:</span> +1% Crit per point</div>
-                          <div><span className="text-green-400">Health:</span> +5% HP per point</div>
-                          <div><span className="text-pink-400">Life Steal:</span> +0.5% LS per point</div>
-                          <div><span className="text-amber-400">Zen:</span> +3% Zen per point</div>
-                          <div><span className="text-cyan-400">Experience:</span> +2% EXP per point</div>
-                          <div><span className="text-lime-400">Poison:</span> +0.5% chance (10% HP dmg)</div>
+                          <div><span className="text-red-400">Damage:</span> +0.2% DMG per point</div>
+                          <div><span className="text-yellow-400">Critical:</span> +0.2% Crit per point</div>
+                          <div><span className="text-green-400">Vitality:</span> +0.2% HP per point</div>
+                          <div><span className="text-pink-400">Life Steal:</span> +0.1% LS per point</div>
+                          <div><span className="text-amber-400">Wealth:</span> +0.5% Zen per point</div>
+                          <div><span className="text-cyan-400">Wisdom:</span> +0.5% EXP per point</div>
+                          <div><span className="text-lime-400">Venom:</span> +0.2% chance (10% HP dmg)</div>
                           <div><span className="text-indigo-400">Excellent:</span> +0.25% chance (2x dmg)</div>
                           <div className="text-gray-400 mt-1 text-xs">+1 point per reset</div>
                         </div>
@@ -1983,7 +3322,7 @@ export default function HomePage() {
                       { key: 'damage', label: 'Damage', value: character.ascDamage, bonus: '+2% DMG', color: 'text-red-400', icon: '⚔️' },
                       { key: 'critical', label: 'Critical', value: character.ascCritical, bonus: '+1% Crit', color: 'text-yellow-400', icon: '💥' },
                       { key: 'health', label: 'Health', value: character.ascHealth, bonus: '+5% HP', color: 'text-green-400', icon: '❤️' },
-                      { key: 'lifeSteal', label: 'Life Steal', value: character.ascLifeSteal, bonus: '+0.5% LS', color: 'text-pink-400', icon: '🩸' },
+                      { key: 'lifeSteal', label: 'Life Steal', value: character.ascLifeSteal, bonus: '+0.1% LS', color: 'text-pink-400', icon: '🩸' },
                       { key: 'zen', label: 'Zen', value: character.ascZen, bonus: '+3% Zen', color: 'text-amber-400', icon: '💰' },
                       { key: 'exp', label: 'Experience', value: character.ascExp, bonus: '+2% EXP', color: 'text-cyan-400', icon: '📈' },
                       { key: 'poison', label: 'Poison', value: character.ascPoison, bonus: '+0.5%', color: 'text-lime-400', icon: '🧪' },
@@ -2032,13 +3371,55 @@ export default function HomePage() {
               <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                 <h2 className="text-lg font-semibold text-yellow-400 mb-3">Equipment</h2>
                 <EquipmentPanel equipment={equipment} onUnequip={handleUnequipItem} />
-                <div className="mt-3 pt-3 border-t border-gray-700 text-xs grid grid-cols-2 gap-1">
-                  {equipmentBonuses.damage_min > 0 && <div className="text-red-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} DMG</div>}
-                  {equipmentBonuses.defense > 0 && <div className="text-blue-400">+{equipmentBonuses.defense} DEF</div>}
-                  {equipmentBonuses.critical_rate > 0 && <div className="text-cyan-400">+{equipmentBonuses.critical_rate}% Crit</div>}
-                  {equipmentBonuses.life_steal > 0 && <div className="text-pink-400">+{equipmentBonuses.life_steal}% LS</div>}
-                  {equipmentBonuses.exp_bonus > 0 && <div className="text-purple-400">+{equipmentBonuses.exp_bonus}% EXP</div>}
-                  {equipmentBonuses.max_hp > 0 && <div className="text-red-400">+{equipmentBonuses.max_hp}% HP</div>}
+                <div className="mt-3 pt-3 border-t border-gray-700 text-xs">
+                  <div className="text-gray-400 mb-2 font-semibold">All Bonuses</div>
+
+                  {/* Equipment */}
+                  <div className="mb-2">
+                    <div className="text-gray-500 text-[10px] mb-1">Equipment:</div>
+                    <div className="grid grid-cols-2 gap-x-2">
+                      {equipmentBonuses.damage_min > 0 && <div className="text-red-400">+{equipmentBonuses.damage_min}-{equipmentBonuses.damage_max} DMG</div>}
+                      {equipmentBonuses.defense > 0 && <div className="text-blue-400">+{equipmentBonuses.defense} DEF</div>}
+                      {equipmentBonuses.attack_speed > 0 && <div className="text-yellow-400">+{equipmentBonuses.attack_speed} Spd</div>}
+                      {equipmentBonuses.critical_rate > 0 && <div className="text-cyan-400">+{equipmentBonuses.critical_rate}% Crit</div>}
+                      {equipmentBonuses.life_steal > 0 && <div className="text-pink-400">+{equipmentBonuses.life_steal}% LS</div>}
+                      {equipmentBonuses.exp_bonus > 0 && <div className="text-purple-400">+{equipmentBonuses.exp_bonus}% EXP</div>}
+                      {equipmentBonuses.zen_bonus > 0 && <div className="text-amber-400">+{equipmentBonuses.zen_bonus}% Zen</div>}
+                      {equipmentBonuses.max_hp > 0 && <div className="text-green-400">+{equipmentBonuses.max_hp}% HP</div>}
+                      {equipmentBonuses.damage_percent > 0 && <div className="text-red-300">+{equipmentBonuses.damage_percent}% DMG</div>}
+                      {equipmentBonuses.defense_percent > 0 && <div className="text-blue-300">+{equipmentBonuses.defense_percent}% DEF</div>}
+                    </div>
+                  </div>
+
+                  {/* Ascension */}
+                  {(character.ascDamage > 0 || character.ascCritical > 0 || character.ascHealth > 0 || character.ascLifeSteal > 0) && (
+                    <div className="mb-2">
+                      <div className="text-gray-500 text-[10px] mb-1">Ascension:</div>
+                      <div className="grid grid-cols-2 gap-x-2">
+                        {character.ascDamage > 0 && <div className="text-red-400">+{(character.ascDamage * 0.2).toFixed(1)}% DMG</div>}
+                        {character.ascCritical > 0 && <div className="text-yellow-400">+{(character.ascCritical * 0.2).toFixed(1)}% Crit</div>}
+                        {character.ascHealth > 0 && <div className="text-green-400">+{(character.ascHealth * 0.2).toFixed(1)}% HP</div>}
+                        {character.ascLifeSteal > 0 && <div className="text-pink-400">+{(character.ascLifeSteal * 0.1).toFixed(1)}% LS</div>}
+                        {character.ascZen > 0 && <div className="text-amber-400">+{(character.ascZen * 0.5).toFixed(1)}% Zen</div>}
+                        {character.ascExp > 0 && <div className="text-cyan-400">+{(character.ascExp * 0.5).toFixed(1)}% EXP</div>}
+                        {character.ascPoison > 0 && <div className="text-lime-400">+{(character.ascPoison * 0.2).toFixed(1)}% Psn</div>}
+                        {character.ascExcellent > 0 && <div className="text-indigo-400">+{(character.ascExcellent * 0.25).toFixed(2)}% Exc</div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reset */}
+                  {character.resetCount > 0 && (
+                    <div>
+                      <div className="text-gray-500 text-[10px] mb-1">Reset ({character.resetCount}x):</div>
+                      <div className="grid grid-cols-2 gap-x-2">
+                        <div className="text-red-400">+{character.resetCount * 5} DMG</div>
+                        <div className="text-blue-400">+{character.resetCount * 3} DEF</div>
+                        <div className="text-green-400">+{character.resetCount * 50} HP</div>
+                        <div className="text-yellow-400">+{character.resetCount * 2} Spd</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

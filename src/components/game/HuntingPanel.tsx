@@ -39,12 +39,13 @@ interface ActiveMonster extends Monster {
   currentHp: number;
   maxHp: number;
   emoji?: string;
+  poisonEndTime?: number;  // timestamp when poison ends
 }
 
 interface FloatingDamage {
   id: number;
   damage: number;
-  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect' | 'poison' | 'helper';
+  type: 'normal' | 'critical' | 'excellent' | 'monster' | 'reflect' | 'poison' | 'helper' | 'heal';
   x: number;
   y: number;
 }
@@ -124,6 +125,7 @@ export default function HuntingPanel({
   const combatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const wasHuntingBeforeDeathRef = useRef(false);
   const burstCooldownRef = useRef<NodeJS.Timeout | null>(null);
+  const currentMonsterRef = useRef<ActiveMonster | null>(null);
 
   const burstTimeRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -161,6 +163,11 @@ export default function HuntingPanel({
   const location = LOCATIONS[selectedLocation];
   const isDead = currentHp <= 0;
 
+  // Keep ref in sync with state for helper attack loop
+  useEffect(() => {
+    currentMonsterRef.current = currentMonster;
+  }, [currentMonster]);
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const addLog = useCallback((_message: string, _type: string) => {
     // Combat log removed
@@ -168,8 +175,43 @@ export default function HuntingPanel({
 
   const addFloatingDamage = useCallback((damage: number, type: FloatingDamage['type']) => {
     damageIdRef.current += 1;
-    const x = 40 + Math.random() * 20;
-    const y = 30 + Math.random() * 10;
+
+    // Different positions based on damage type for better visibility
+    let x: number, y: number;
+    switch (type) {
+      case 'normal':
+      case 'critical':
+      case 'excellent':
+        // Player damage - upper area, spread horizontally
+        x = 15 + Math.random() * 70;
+        y = 15 + Math.random() * 20;
+        break;
+      case 'monster':
+        // Monster damage - lower area
+        x = 20 + Math.random() * 60;
+        y = 60 + Math.random() * 20;
+        break;
+      case 'heal':
+        // Heal - center-right
+        x = 60 + Math.random() * 30;
+        y = 35 + Math.random() * 20;
+        break;
+      case 'helper':
+        // Helper damage - left side
+        x = 5 + Math.random() * 25;
+        y = 30 + Math.random() * 25;
+        break;
+      case 'poison':
+      case 'reflect':
+        // DOT/reflect - center
+        x = 35 + Math.random() * 30;
+        y = 40 + Math.random() * 20;
+        break;
+      default:
+        x = 20 + Math.random() * 60;
+        y = 25 + Math.random() * 40;
+    }
+
     const newDamage: FloatingDamage = {
       id: damageIdRef.current,
       damage,
@@ -184,8 +226,44 @@ export default function HuntingPanel({
     }, 1000);
   }, []);
 
-  const spawnMonster = useCallback(() => {
-    const locationMonsters = location.monsters;
+  // Poison DOT effect - deals 2% of monster's current HP every second for max 5 seconds
+  useEffect(() => {
+    if (!currentMonster || !currentMonster.poisonEndTime) return;
+
+    const now = Date.now();
+    if (now >= currentMonster.poisonEndTime) {
+      // Poison expired, remove it
+      setCurrentMonster(prev => prev ? { ...prev, poisonEndTime: undefined } : null);
+      return;
+    }
+
+    const poisonInterval = setInterval(() => {
+      setCurrentMonster(prev => {
+        if (!prev || !prev.poisonEndTime) return prev;
+
+        const currentTime = Date.now();
+        if (currentTime >= prev.poisonEndTime) {
+          // Poison expired
+          return { ...prev, poisonEndTime: undefined };
+        }
+
+        // Deal 2% of current HP as poison damage per tick
+        const poisonDmg = Math.max(1, Math.floor(prev.currentHp * 0.02));
+        const newHp = Math.max(0, prev.currentHp - poisonDmg);
+
+        // Show floating damage
+        addFloatingDamage(poisonDmg, 'poison');
+
+        return { ...prev, currentHp: newHp };
+      });
+    }, 1000);
+
+    return () => clearInterval(poisonInterval);
+  }, [currentMonster?.poisonEndTime, addFloatingDamage]);
+
+  // Spawn monster from a specific location
+  const spawnMonsterFromLocation = useCallback((loc: typeof location) => {
+    const locationMonsters = loc.monsters;
 
     if (!locationMonsters || locationMonsters.length === 0) {
       addLog('No monsters in this area!', 'info');
@@ -201,7 +279,15 @@ export default function HuntingPanel({
 
     addLog(`${monster.name} appeared! (Lv.${monster.level})`, 'info');
     return activeMonster;
-  }, [location, addLog]);
+  }, [addLog]);
+
+  // Spawn monster from current location
+  const spawnMonster = useCallback(() => {
+    return spawnMonsterFromLocation(location);
+  }, [location, spawnMonsterFromLocation]);
+
+  // Ref to track zone where player died (to go back one zone)
+  const diedInZoneRef = useRef<number | null>(null);
 
   // Respawn countdown timer
   useEffect(() => {
@@ -213,12 +299,26 @@ export default function HuntingPanel({
       onHpChange(maxHp);
       addLog('Respawned with full HP!', 'heal');
 
+      // First, go back one zone if we died (BEFORE spawning monster)
+      let newLocationIndex = selectedLocation;
+      if (diedInZoneRef.current !== null) {
+        const deathZone = diedInZoneRef.current;
+        if (deathZone > 0) {
+          newLocationIndex = deathZone - 1;
+          setSelectedLocation(newLocationIndex);
+        }
+        diedInZoneRef.current = null;
+      }
+
       // Auto-resume hunting if was hunting before death
+      // Use the NEW location directly (not from memoized spawnMonster)
       if (wasHuntingBeforeDeathRef.current) {
+        const newLocation = LOCATIONS[newLocationIndex];
         setTimeout(() => {
           setIsHunting(true);
-          setCurrentMonster(spawnMonster());
-          addLog(`Resumed hunting in ${location.name}!`, 'info');
+          // Use spawnMonsterFromLocation with the correct new location
+          setCurrentMonster(spawnMonsterFromLocation(newLocation));
+          addLog(`Resumed hunting in ${newLocation.name}!`, 'info');
         }, 100);
       }
       return;
@@ -229,35 +329,24 @@ export default function HuntingPanel({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [respawnCountdown, maxHp, onHpChange, addLog, spawnMonster, location.name]);
+  }, [respawnCountdown, maxHp, onHpChange, addLog, spawnMonsterFromLocation, selectedLocation]);
 
-  // Ref to track zone where player died (to go back one zone)
-  const diedInZoneRef = useRef<number | null>(null);
-
-  // Handle death - start respawn countdown and go back one zone
+  // Handle death - start respawn countdown
   useEffect(() => {
-    if (isDead && respawnCountdown === null && isHunting) {
-      wasHuntingBeforeDeathRef.current = true;
-      diedInZoneRef.current = selectedLocation; // Remember where we died
-      setIsHunting(false);
-      setCurrentMonster(null);
+    if (isDead && respawnCountdown === null) {
+      // If we were hunting, remember to resume
+      if (isHunting) {
+        wasHuntingBeforeDeathRef.current = true;
+        diedInZoneRef.current = selectedLocation; // Remember where we died
+        setIsHunting(false);
+        setCurrentMonster(null);
+        onDeath();
+      }
+      // Always start respawn countdown when dead (covers dying in Events/Tower/Boss)
       addLog('You have been defeated! Respawning in 5 seconds...', 'death');
       setRespawnCountdown(5);
-      onDeath();
     }
   }, [isDead, respawnCountdown, isHunting, addLog, onDeath, selectedLocation]);
-
-  // After respawn, go back one zone if we died
-  useEffect(() => {
-    if (respawnCountdown === 0 && diedInZoneRef.current !== null) {
-      const deathZone = diedInZoneRef.current;
-      // Go back one zone (minimum zone 0)
-      if (deathZone > 0) {
-        setSelectedLocation(deathZone - 1);
-      }
-      diedInZoneRef.current = null;
-    }
-  }, [respawnCountdown]);
 
   const performCombatRound = useCallback(() => {
     if (!currentMonster || currentHp <= 0) return;
@@ -265,18 +354,16 @@ export default function HuntingPanel({
     // Player attacks monster
     const isCritical = Math.random() * 100 < criticalRate;
     const isExcellent = Math.random() * 100 < excellentChance;
-    const isPoison = poisonChance > 0 && Math.random() * 100 < poisonChance;
+    // Only try to apply poison if monster is not already poisoned
+    const canPoison = poisonChance > 0 && !currentMonster.poisonEndTime;
+    const isPoison = canPoison && Math.random() * 100 < poisonChance;
 
     // Apply buffer bonus to damage
     const buffedMinDamage = Math.floor(minDamage * (1 + helperBufferBonus / 100));
     const buffedMaxDamage = Math.floor(maxDamage * (1 + helperBufferBonus / 100));
     const playerDamage = calculateDamage(buffedMinDamage, buffedMaxDamage, isCritical, isExcellent);
 
-    // Poison deals 10% of monster's CURRENT HP
-    const poisonDamage = isPoison ? Math.floor(currentMonster.currentHp * 0.1) : 0;
-    const totalDamage = playerDamage + poisonDamage;
-
-    const newMonsterHp = Math.max(0, currentMonster.currentHp - totalDamage);
+    const newMonsterHp = Math.max(0, currentMonster.currentHp - playerDamage);
 
     // Add floating damage for main hit
     if (isExcellent) {
@@ -290,12 +377,11 @@ export default function HuntingPanel({
       addLog(`You deal ${playerDamage} damage to ${currentMonster.name}.`, 'damage');
     }
 
-    // Add floating damage for poison (separate number)
-    if (isPoison && poisonDamage > 0) {
-      setTimeout(() => {
-        addFloatingDamage(poisonDamage, 'poison');
-      }, 150);
-      addLog(`Poison! ${poisonDamage} extra damage!`, 'damage');
+    // Apply poison effect (DOT for 5 seconds, deals 2% HP per second)
+    let updatedMonster = { ...currentMonster, currentHp: newMonsterHp };
+    if (isPoison) {
+      updatedMonster.poisonEndTime = Date.now() + 5000; // 5 seconds
+      addLog(`${currentMonster.name} is poisoned!`, 'damage');
     }
 
     // Check if monster died
@@ -383,18 +469,7 @@ export default function HuntingPanel({
       return;
     }
 
-    // Life steal: heal from damage dealt
-    if (lifeSteal > 0) {
-      const healFromSteal = Math.floor(playerDamage * lifeSteal / 100);
-      if (healFromSteal > 0) {
-        const newHpAfterSteal = Math.min(maxHp, currentHp + healFromSteal);
-        if (newHpAfterSteal > currentHp) {
-          onHpChange(newHpAfterSteal);
-        }
-      }
-    }
-
-    setCurrentMonster({ ...currentMonster, currentHp: newMonsterHp });
+    setCurrentMonster(updatedMonster);
 
     // Monster attacks player
     const monsterDamage = Math.max(1, Math.floor(
@@ -415,6 +490,18 @@ export default function HuntingPanel({
         setCurrentMonster((prev) => prev ? { ...prev, currentHp: Math.max(0, monsterHpAfterReflect) } : null);
         addFloatingDamage(reflectedAmount, 'reflect');
         addLog(`Reflected ${reflectedAmount} damage back!`, 'damage');
+      }
+    }
+
+    // Life steal: heal from damage dealt (applied AFTER monster damage)
+    if (lifeSteal > 0) {
+      const healFromSteal = Math.floor(playerDamage * lifeSteal / 100);
+      if (healFromSteal > 0) {
+        finalPlayerHp = Math.min(maxHp, finalPlayerHp + healFromSteal);
+        // Show heal as floating green number
+        setTimeout(() => {
+          addFloatingDamage(healFromSteal, 'heal');
+        }, 200);
       }
     }
 
@@ -494,12 +581,25 @@ export default function HuntingPanel({
   // Helper Attacker combat loop (2 attacks per second = 500ms interval)
   const helperIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const performHelperAttack = useCallback(() => {
-    if (!currentMonster || currentHp <= 0 || helperAttackerLevel <= 0) return;
+  // Use refs for values that change frequently to avoid recreating the interval
+  const currentHpRef = useRef(currentHp);
+  const helperAttackerDamageRef = useRef(helperAttackerDamage);
 
-    // Helper damage: base 5 + level * 2
-    const helperDmg = helperAttackerDamage > 0 ? helperAttackerDamage : 5 + helperAttackerLevel * 2;
-    const newMonsterHp = Math.max(0, currentMonster.currentHp - helperDmg);
+  useEffect(() => {
+    currentHpRef.current = currentHp;
+  }, [currentHp]);
+
+  useEffect(() => {
+    helperAttackerDamageRef.current = helperAttackerDamage;
+  }, [helperAttackerDamage]);
+
+  const performHelperAttack = useCallback(() => {
+    const monster = currentMonsterRef.current;
+    if (!monster || currentHpRef.current <= 0 || helperAttackerLevel <= 0) return;
+
+    // Helper damage: base 50 + level * 20 (10x stronger)
+    const helperDmg = helperAttackerDamageRef.current > 0 ? helperAttackerDamageRef.current : 50 + helperAttackerLevel * 20;
+    const newMonsterHp = Math.max(0, monster.currentHp - helperDmg);
 
     addFloatingDamage(helperDmg, 'helper');
 
@@ -510,25 +610,25 @@ export default function HuntingPanel({
 
       const resetExpBonus = resetCount * 0.1;
       const resetZenBonus = resetCount * 0.1;
-      const expGain = Math.floor(currentMonster.exp * 5.625 * (1 + (expBonus + resetExpBonus) / 100));
-      const zenGain = Math.floor(currentMonster.zen * 36 * (1 + (zenBonus - 1 + resetZenBonus) / 100));
+      const expGain = Math.floor(monster.exp * 5.625 * (1 + (expBonus + resetExpBonus) / 100));
+      const zenGain = Math.floor(monster.zen * 36 * (1 + (zenBonus - 1 + resetZenBonus) / 100));
 
       onExpGain(BigInt(expGain), BigInt(zenGain));
 
       // Heal 5% HP on kill
       const healAmount = Math.floor(maxHp * 0.05);
-      const newHp = Math.min(maxHp, currentHp + healAmount);
-      if (newHp > currentHp) {
+      const newHp = Math.min(maxHp, currentHpRef.current + healAmount);
+      if (newHp > currentHpRef.current) {
         onHpChange(newHp);
       }
 
       // Item drop
       if (Math.random() < 0.02) {
-        onItemDrop(currentMonster.level);
+        onItemDrop(monster.level);
       }
 
       // Jewel drops
-      if (currentMonster.level >= 41) {
+      if (monster.level >= 41) {
         if (Math.random() < 0.008) onJewelDrop('bless');
         if (Math.random() < 0.008) onJewelDrop('soul');
         if (Math.random() < 0.008) onJewelDrop('life');
@@ -538,9 +638,9 @@ export default function HuntingPanel({
       setCurrentMonster(null);
       setTimeout(() => setCurrentMonster(spawnMonster()), 500);
     } else {
-      setCurrentMonster({ ...currentMonster, currentHp: newMonsterHp });
+      setCurrentMonster({ ...monster, currentHp: newMonsterHp });
     }
-  }, [currentMonster, currentHp, helperAttackerLevel, helperAttackerDamage, resetCount, expBonus, zenBonus, maxHp, onExpGain, onHpChange, onItemDrop, onJewelDrop, onMonsterKill, addFloatingDamage, spawnMonster]);
+  }, [helperAttackerLevel, resetCount, expBonus, zenBonus, maxHp, onExpGain, onHpChange, onItemDrop, onJewelDrop, onMonsterKill, addFloatingDamage, spawnMonster]);
 
   useEffect(() => {
     if (isHunting && currentHp > 0 && helperAttackerLevel > 0) {
@@ -697,6 +797,36 @@ export default function HuntingPanel({
 
         {/* Monster Display with Floating Damage */}
         <div className="relative">
+          {/* Floating Damage Numbers - Always render, independent of monster state */}
+          {floatingDamages.map((fd) => (
+            <div
+              key={fd.id}
+              className={`absolute text-xl font-bold pointer-events-none animate-float-up z-30 ${
+                fd.type === 'excellent' ? 'text-green-400' :
+                fd.type === 'critical' ? 'text-cyan-400' :
+                fd.type === 'monster' ? 'text-red-500' :
+                fd.type === 'reflect' ? 'text-purple-400' :
+                fd.type === 'poison' ? 'text-lime-400' :
+                fd.type === 'helper' ? 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]' :
+                fd.type === 'heal' ? 'text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.8)]' :
+                'text-yellow-400'
+              }`}
+              style={{
+                left: `${fd.x}%`,
+                top: `${fd.y}%`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {fd.type === 'monster' ? `-${fd.damage}` : fd.type === 'heal' ? `+${fd.damage}` : fd.damage}
+              {fd.type === 'excellent' && <span className="text-xs ml-1">EXC!</span>}
+              {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
+              {fd.type === 'reflect' && <span className="text-xs ml-1">REFLECT!</span>}
+              {fd.type === 'poison' && <span className="text-xs ml-1">☠️</span>}
+              {fd.type === 'helper' && <span className="text-xs ml-1">⚔️</span>}
+              {fd.type === 'heal' && <span className="text-xs ml-1">HP</span>}
+            </div>
+          ))}
+
           {isDead ? (
             <div className="text-center py-8">
               <div className="text-4xl mb-2">💀</div>
@@ -707,36 +837,13 @@ export default function HuntingPanel({
             </div>
           ) : currentMonster ? (
             <div className={`text-center py-4 relative ${burstActive ? 'animate-shake-fast' : ''}`}>
-              {/* Floating Damage Numbers */}
-              {floatingDamages.map((fd) => (
-                <div
-                  key={fd.id}
-                  className={`absolute text-xl font-bold pointer-events-none animate-float-up ${
-                    fd.type === 'excellent' ? 'text-green-400' :
-                    fd.type === 'critical' ? 'text-cyan-400' :
-                    fd.type === 'monster' ? 'text-red-500' :
-                    fd.type === 'reflect' ? 'text-purple-400' :
-                    fd.type === 'poison' ? 'text-lime-400' :
-                    fd.type === 'helper' ? 'text-amber-400' :
-                    'text-yellow-400'
-                  }`}
-                  style={{
-                    left: `${fd.x}%`,
-                    top: `${fd.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                  }}
-                >
-                  {fd.type === 'monster' ? `-${fd.damage}` : fd.damage}
-                  {fd.type === 'excellent' && <span className="text-xs ml-1">EXC!</span>}
-                  {fd.type === 'critical' && <span className="text-xs ml-1">CRIT!</span>}
-                  {fd.type === 'reflect' && <span className="text-xs ml-1">REFLECT!</span>}
-                  {fd.type === 'poison' && <span className="text-xs ml-1">☠️</span>}
-                  {fd.type === 'helper' && <span className="text-xs ml-1">🤖</span>}
-                </div>
-              ))}
-
               <div className="text-4xl mb-2">{currentMonster.emoji || '👹'}</div>
-              <div className="text-lg font-bold">{currentMonster.name}</div>
+              <div className="text-lg font-bold flex items-center justify-center gap-1">
+                {currentMonster.name}
+                {currentMonster.poisonEndTime && Date.now() < currentMonster.poisonEndTime && (
+                  <span className="text-lime-400 animate-pulse" title="Poisoned">☠️</span>
+                )}
+              </div>
               <div className="text-sm text-gray-400">Level {currentMonster.level}</div>
               <div className="mt-2 max-w-xs mx-auto">
                 <div className="flex justify-between text-xs mb-1">
@@ -745,7 +852,11 @@ export default function HuntingPanel({
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-green-500 h-3 rounded-full transition-[width] duration-500 ease-out"
+                    className={`h-3 rounded-full transition-all duration-500 ease-out ${
+                      currentMonster.poisonEndTime && Date.now() < currentMonster.poisonEndTime
+                        ? 'bg-lime-900'
+                        : 'bg-green-500'
+                    }`}
                     style={{ width: `${monsterHpPercent}%` }}
                   />
                 </div>

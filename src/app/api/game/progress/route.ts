@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
       exp_per_second,
       zen_per_second,
       update_heartbeat = true, // Set to false for beforeunload saves
+      kills_gained = 0, // For quest tracking
+      exp_gained = 0, // For quest tracking
     } = body;
 
     let character;
@@ -51,10 +53,10 @@ export async function POST(request: NextRequest) {
     let newExp = experience !== undefined ? BigInt(experience) : character.experience;
     let newLevel = level !== undefined ? level : character.level;
 
-    // Auto level up calculation (quadratic formula: level² × 3.75)
+    // Auto level up calculation (quadratic formula: level² × 2.8125 - reduced 25%)
     if (experience !== undefined) {
-      while (newExp >= BigInt(Math.floor(newLevel * newLevel * 3.75)) && newLevel < MAX_LEVEL) {
-        newExp -= BigInt(Math.floor(newLevel * newLevel * 3.75));
+      while (newExp >= BigInt(Math.floor(newLevel * newLevel * 2.8125)) && newLevel < MAX_LEVEL) {
+        newExp -= BigInt(Math.floor(newLevel * newLevel * 2.8125));
         newLevel++;
       }
       // Cap exp at 0 if max level
@@ -87,6 +89,36 @@ export async function POST(request: NextRequest) {
     // Only update heartbeat during active gameplay (not on beforeunload)
     if (update_heartbeat) {
       updateData.lastHeartbeat = new Date();
+    }
+
+    // Update quest progress (kills and exp)
+    const now = new Date();
+    const isSameDay = (d1: Date, d2: Date) =>
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate();
+
+    // Check if quest needs reset
+    let currentQuestKills = character.questKillsToday;
+    let currentQuestExp = character.questExpToday;
+
+    if (!character.lastQuestResetDate || !isSameDay(character.lastQuestResetDate, now)) {
+      currentQuestKills = 0;
+      currentQuestExp = BigInt(0);
+      updateData.lastQuestResetDate = now;
+      updateData.questEventToday = false;
+      updateData.questBossToday = false;
+      updateData.questCraftToday = false;
+      updateData.questResetToday = false;
+      updateData.claimedQuests = '[]';
+    }
+
+    // Add kills and exp to quest progress
+    if (kills_gained > 0) {
+      updateData.questKillsToday = currentQuestKills + kills_gained;
+    }
+    if (exp_gained > 0) {
+      updateData.questExpToday = currentQuestExp + BigInt(exp_gained);
     }
 
     const updatedCharacter = await prisma.playerCharacter.update({
