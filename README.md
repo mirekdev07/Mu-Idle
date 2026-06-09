@@ -1,6 +1,6 @@
 # MU Idle Adventure
 
-Idle / clicker RPG inspirowany **MU Online** — postacie, ekwipunek, bossy, eventy, ranking, system offline rewards. Aplikacja webowa (Next.js) z buildem mobilnym na Android przez Capacitor.
+Idle / clicker RPG inspired by **MU Online** — characters, equipment, bosses, events, ranking, and an offline rewards system. Web app built with Next.js, with an Android mobile build via Capacitor.
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
@@ -11,24 +11,24 @@ Idle / clicker RPG inspirowany **MU Online** — postacie, ekwipunek, bossy, eve
 
 ---
 
-## Co potrafi gra
+## Game features
 
-| System | Opis |
+| System | Description |
 | --- | --- |
-| **Klasy postaci** | Dark Knight, Dark Wizard, Elf, Magic Gladiator i inne — każda z osobnym drzewkiem statystyk |
-| **Hunting Zone** | Pasywne zdobywanie EXP, item dropy, polowanie w tle |
-| **Helpers** | System pomocników: Attacker + Buffer wspierają polowanie |
-| **Boss Zone** | Walki z bossami o lepszy loot |
-| **Endless Tower** | Tryb piętrowy — coraz trudniejsi przeciwnicy |
-| **Chaos Machine** | Tworzenie i ulepszanie itemów (Jewele, Wings, Excellent items) |
-| **Crafting** | Rzemiosło z materiałów (Blood Bone, Devil's Eye, Feather...) |
-| **Achievements** | System osiągnięć z nagrodami |
-| **Quests** | Dynamiczne questy |
-| **Events** | Blood Castle, Devil Square i inne czasowe eventy |
-| **Ranking** | Globalna tablica wyników |
-| **Vault** | Współdzielony magazyn między postaciami |
-| **Wiki** | Wbudowana baza wiedzy o grze |
-| **Offline Rewards** | 20% normalnej produkcji w czasie nieobecności, max 8h, system "heartbeat" zapobiega podwójnemu liczeniu |
+| **Character classes** | Dark Knight, Dark Wizard, Elf, Magic Gladiator and more — each with its own stat tree |
+| **Hunting Zone** | Passive EXP gain, item drops, background hunting |
+| **Helpers** | Companion system: Attacker + Buffer support your hunting |
+| **Boss Zone** | Boss fights with better loot |
+| **Endless Tower** | Floor-based mode — progressively harder enemies |
+| **Chaos Machine** | Create and upgrade items (Jewels, Wings, Excellent items) |
+| **Crafting** | Crafting from materials (Blood Bone, Devil's Eye, Feather...) |
+| **Achievements** | Achievement system with rewards |
+| **Quests** | Dynamic quests |
+| **Events** | Blood Castle, Devil Square and other timed events |
+| **Ranking** | Global leaderboard |
+| **Vault** | Shared storage across characters |
+| **Wiki** | Built-in game knowledge base |
+| **Offline Rewards** | 20% of normal production while away, 8h max, heartbeat system prevents double-counting |
 
 ---
 
@@ -36,22 +36,22 @@ Idle / clicker RPG inspirowany **MU Online** — postacie, ekwipunek, bossy, eve
 
 - **Next.js 15** (App Router) + React 19 + TypeScript
 - **Prisma** ORM + **PostgreSQL** (Neon serverless)
-- **NextAuth.js** + Prisma adapter (autoryzacja)
-- **Tailwind CSS** + komponenty UI
-- **@dnd-kit** (drag & drop ekwipunku)
-- **Capacitor 8** (build mobilny Android)
+- **NextAuth.js** + Prisma adapter (authentication)
+- **Tailwind CSS** + UI components
+- **@dnd-kit** (inventory drag & drop)
+- **Capacitor 8** (Android mobile build)
 
 ---
 
 ## Quick start
 
 ```bash
-git clone https://github.com/<user>/mu-idle-nextjs.git
-cd mu-idle-nextjs
+git clone https://github.com/mirekdev07/Mu-Idle.git
+cd Mu-Idle
 npm install
 
 cp .env.example .env
-# Wypełnij DATABASE_URL i NEXTAUTH_SECRET
+# Fill in DATABASE_URL and NEXTAUTH_SECRET
 
 npx prisma db push
 npm run db:seed
@@ -59,62 +59,62 @@ npm run db:seed
 npm run dev
 ```
 
-Otwórz [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## Skrypty
+## Scripts
 
-| Komenda | Opis |
+| Command | Description |
 | --- | --- |
-| `npm run dev` | Start Next.js w trybie dev |
-| `npm run build` | Build produkcyjny (`prisma generate` + `next build`) |
-| `npm run start` | Uruchomienie zbudowanej wersji |
+| `npm run dev` | Start Next.js in dev mode |
+| `npm run build` | Production build (`prisma generate` + `next build`) |
+| `npm run start` | Run the built version |
 | `npm run lint` | ESLint |
-| `npm run db:push` | Synchronizacja schematu Prisma z bazą |
-| `npm run db:seed` | Inicjalne dane (`prisma/seed.ts`) |
-| `npm run db:migrate` | Migracje Prisma |
-| `npm run db:studio` | Prisma Studio (GUI bazy) |
+| `npm run db:push` | Sync Prisma schema with database |
+| `npm run db:seed` | Initial data (`prisma/seed.ts`) |
+| `npm run db:migrate` | Prisma migrations |
+| `npm run db:studio` | Prisma Studio (database GUI) |
 
 ---
 
-## Build mobilny (Android APK)
+## Mobile build (Android APK)
 
 ```bash
 npm run build
 npx cap sync android
-npx cap open android   # otwiera Android Studio
+npx cap open android   # opens Android Studio
 ```
 
-Capacitor konfigurowany w `capacitor.config.ts`. App ID: `com.muidle.adventure`.
+Capacitor configured in `capacitor.config.ts`. App ID: `com.muidle.adventure`.
 
-`*.apk`, `*.aab`, `*.jks` są w `.gitignore` — keystore podpisujący release nigdy nie idzie do repo.
+`*.apk`, `*.aab`, `*.jks` are in `.gitignore` — the release-signing keystore never goes into the repo.
 
 ---
 
-## Struktura projektu
+## Project structure
 
 ```
 src/
-├── app/                # Routy Next.js (App Router)
-│   ├── api/            # Endpointy (boss, characters, events, crafting, ranking...)
-│   ├── boss-zone/      # Walka z bossami
-│   ├── chaos-machine/  # Crafting / upgrade itemów
-│   ├── characters/     # Lista i wybór postaci
-│   ├── events/         # Eventy czasowe
-│   ├── ranking/        # Tablica wyników
-│   ├── vault/          # Magazyn
-│   └── wiki/           # Encyklopedia gry
-├── components/         # React komponenty (GameLoop, InventorySlot, ItemModal...)
+├── app/                # Next.js routes (App Router)
+│   ├── api/            # Endpoints (boss, characters, events, crafting, ranking...)
+│   ├── boss-zone/      # Boss fight page
+│   ├── chaos-machine/  # Item crafting / upgrades
+│   ├── characters/     # Character list and selection
+│   ├── events/         # Timed events
+│   ├── ranking/        # Leaderboard
+│   ├── vault/          # Storage
+│   └── wiki/           # Game encyclopedia
+├── components/         # React components (GameLoop, InventorySlot, ItemModal...)
 ├── lib/
-│   ├── game/           # Logika gry (formulas, bosses, achievements, quests, endless-tower)
-│   └── services/       # Warstwa serwisów (character, item, stats)
-├── store/              # Stan klienta
-└── types/              # Typy TypeScript
+│   ├── game/           # Game logic (formulas, bosses, achievements, quests, endless-tower)
+│   └── services/       # Service layer (character, item, stats)
+├── store/              # Client state
+└── types/              # TypeScript types
 
 prisma/
-├── schema.prisma       # Schemat bazy (Users, Characters, Items, Inventory, ...)
-└── seed.ts             # Seed danych
+├── schema.prisma       # Database schema (Users, Characters, Items, Inventory, ...)
+└── seed.ts             # Seed data
 ```
 
 ---
@@ -127,10 +127,10 @@ Production: **Vercel** + Neon PostgreSQL.
 vercel --prod
 ```
 
-Pamiętaj o ustawieniu zmiennych środowiskowych w panelu Vercel.
+Remember to configure environment variables in the Vercel dashboard.
 
 ---
 
-## Licencja
+## License
 
-Projekt prywatny / portfolio. MU Online jest znakiem towarowym Webzen Inc. — projekt nie jest powiązany z oryginalnym wydawcą.
+Private / portfolio project. MU Online is a trademark of Webzen Inc. — this project is not affiliated with the original publisher.
