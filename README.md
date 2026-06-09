@@ -135,4 +135,6 @@ Remember to configure environment variables in the Vercel dashboard.
 
 ## License
 
-Private / portfolio project. MU Online is a trademark of Webzen Inc. — this project is not affiliated with the original publisher.
+**MIT** — see [LICENSE](./LICENSE). Free to use, modify, and distribute, including commercially.
+
+> "MU Online" is a trademark of Webzen Inc. This project is fan-made and not affiliated with the original publisher.
